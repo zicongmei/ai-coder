@@ -11,6 +11,8 @@ import colorama # Added for colored output
 from colorama import Fore, Style, init # Import specific colorama components
 import time # Import time for basic timestamping and duration calculation
 import webbrowser # Added to open files in browser
+import markdown   # Added for Markdown to HTML conversion
+import codecs     # Added for writing HTML with UTF-8
 
 # --- Configuration ---
 # Specify the Gemini model you want to use
@@ -101,6 +103,7 @@ def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool)
             'prompt_file_path': str | None,      # Path to saved final prompt
             'raw_response_file': str | None,      # Path to saved raw response
             'cleaned_response_file': str | None, # Path to saved cleaned response (may be same as raw if no cleaning needed)
+            'html_result_file': str | None,       # Path to saved HTML result file (NEW)
             'error': str | None                  # Error message if any step failed
           }
     """
@@ -117,6 +120,7 @@ def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool)
         'prompt_file_path': None,
         'raw_response_file': None,
         'cleaned_response_file': None,
+        'html_result_file': None, # Initialize HTML file path
         'error': None
     }
     log_step("Starting file reading loop...")
@@ -291,8 +295,14 @@ def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool)
                  # Find first newline after initial ```
                  first_newline = response_text.find('\n')
                  if first_newline != -1:
-                     response_text = response_text[first_newline+1:-3].strip()
-                     cleaned = True
+                     # Check if the line after ``` looks like a language specifier
+                     potential_lang = response_text[3:first_newline].strip()
+                     if potential_lang and not potential_lang.startswith('-') and ' ' not in potential_lang: # Simple check for language specifier
+                         response_text = response_text[first_newline+1:-3].strip()
+                         cleaned = True
+                     else: # Assume no language specifier, just ```\n content ```
+                         response_text = response_text[3:-3].strip() # Keep content inside ```
+                         cleaned = True
                  else: # Handle case like ```content```
                      response_text = response_text[3:-3].strip()
                      cleaned = True
@@ -436,6 +446,9 @@ def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool)
                  result_message += "\n\n" + Fore.RED + "Text parsing failed or yielded no valid content. No files were modified."
              log_warn("Inplace modification finished with errors.") # Log warning if errors occurred
 
+        # Ensure usage_info is updated even if inplace modification fails partially or completely
+        usage_info['error'] = "; ".join(errors) if errors else None # Update error status in usage
+
         return result_message, usage_info # Return status message and usage info
 
     else:
@@ -449,7 +462,7 @@ if __name__ == "__main__":
     init(autoreset=True)
     log_step("Script execution started.")
 
-    parser = argparse.ArgumentParser(description="Process EXISTING files with the Gemini API, calculate cost, and optionally modify them inplace using a specific text format based on ABSOLUTE paths.")
+    parser = argparse.ArgumentParser(description="Process EXISTING files with the Gemini API, calculate cost, optionally modify them inplace (text format), and convert final non-inplace response to HTML.")
 
     # --- Argument Parsing ---
     log_step("Parsing command line arguments...")
@@ -569,33 +582,45 @@ if __name__ == "__main__":
     print(Fore.MAGENTA + "-------------------------\n")
 
 
-    # --- Display Token, Cost, Duration, and Saved File Info ---
-    print(Fore.MAGENTA + "\n--- Usage & Cost Estimation ---") # Keep the header
+    # --- Display Token, Cost, Duration, Saved File Info, and Convert/Open HTML ---
+    print(Fore.MAGENTA + "\n--- Usage, Cost & Output Files ---") # Updated header
     opened_file = False # Flag to track if a file was opened
+    html_file_path = None # Initialize HTML file path
+
     if usage_details: # Check if usage_details dictionary exists
-        # Print token/cost info if no error occurred during calculation
-        if usage_details.get('error') is None or "Usage metadata missing" in usage_details.get('error', ""): # Show info even if only metadata missing
-            log_info(f"Input Tokens:  {usage_details.get('input_tokens', 'N/A')}")
-            log_info(f"Output Tokens: {usage_details.get('output_tokens', 'N/A')}")
-            cost = usage_details.get('cost', 0.0)
-            if usage_details.get('error') is None : # Only show cost success if no error at all
-                 log_success(f"Estimated Cost: ${cost:.6f}")
-            else: # Show cost as N/A if metadata was missing
-                 log_warn(f"Estimated Cost: N/A (due to missing usage metadata)")
+        # --- Print Token/Cost Info ---
+        usage_error = usage_details.get('error')
+        # Show token/cost info if no error or only metadata missing or only inplace errors
+        show_cost_info = not usage_error or "Usage metadata missing" in usage_error or args.inplace
 
-        # Print error if one occurred during usage/cost processing (and wasn't just missing metadata)
-        elif usage_details.get('error') and "Usage metadata missing" not in usage_details.get('error', ""):
-            log_error(f"Could not calculate usage/cost. Error: {usage_details['error']}")
+        if show_cost_info:
+            input_tokens_str = usage_details.get('input_tokens', 'N/A')
+            output_tokens_str = usage_details.get('output_tokens', 'N/A')
+            cost_str = f"${usage_details.get('cost', 0.0):.6f}" if usage_details.get('cost') is not None else "N/A"
 
-        # Print API call duration if available
+            log_info(f"Input Tokens:  {input_tokens_str}")
+            log_info(f"Output Tokens: {output_tokens_str}")
+
+            if "Usage metadata missing" in (usage_error or ""):
+                log_warn(f"Estimated Cost: N/A (due to missing usage metadata)")
+            elif usage_details.get('cost') is not None:
+                 log_success(f"Estimated Cost: {cost_str}")
+            else: # Should not happen if show_cost_info is true unless cost calculation failed silently
+                 log_warn(f"Estimated Cost: N/A")
+
+        # Print general error if one occurred and wasn't related to metadata/inplace
+        elif usage_error:
+            log_error(f"Could not calculate usage/cost. Error: {usage_error}")
+
+        # --- Print API Call Duration ---
         duration = usage_details.get('api_call_duration')
         if duration is not None:
              log_info(f"API Call Duration: {duration:.3f} seconds")
 
-        # Print saved file paths if they exist in the dictionary
+        # --- Print Saved Text File Paths ---
         prompt_file = usage_details.get('prompt_file_path')
         raw_file = usage_details.get('raw_response_file')
-        final_file = usage_details.get('cleaned_response_file')
+        final_file = usage_details.get('cleaned_response_file') # This is the potential Markdown file
 
         if prompt_file:
             log_info(f"Final prompt saved to:      {prompt_file}")
@@ -604,38 +629,134 @@ if __name__ == "__main__":
         if final_file:
             log_info(f"Final response text saved to: {final_file}")
 
-            # --- Attempt to open the final file ---
-            # Only attempt to open if NOT in inplace mode OR if inplace mode had errors (to view the problematic response)
-            should_open = not args.inplace or (args.inplace and usage_details.get('error') is not None)
-            # Also check if the result message indicates parsing failure or other errors
-            if args.inplace and ("Fatal Error" in api_result_output or "Errors encountered" in api_result_output or "partially" in api_result_output):
-                 should_open = True
+            # --- BEGIN INSERTED HTML CONVERSION CODE ---
+            # Convert the final_file content to HTML if it exists
+            log_step(f"Attempting to convert final response '{final_file}' to HTML...")
+            try:
+                # Ensure the markdown library is available (already imported at top)
 
-            if should_open:
-                log_step(f"Attempting to open final response file in browser: {final_file}")
-                try:
-                    # Use file:// URI scheme for local files
-                    file_uri = f"file://{os.path.abspath(final_file)}"
-                    webbrowser.open(file_uri)
-                    log_success(f"Opened (or attempted to open) {final_file} in default browser.")
-                    opened_file = True
-                except Exception as wb_e:
-                    log_error(f"Failed to open file in browser: {wb_e}")
-                    log_warn("Please open the file manually.")
+                # Read the final response text (assumed Markdown)
+                with open(final_file, 'r', encoding='utf-8') as md_file:
+                    markdown_content = md_file.read()
+
+                # Basic HTML structure with some simple styling
+                html_head = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini API Result</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; max-width: 900px; margin: auto; color: #333; }
+        pre { background-color: #f4f4f4; padding: 1em; border-radius: 5px; overflow-x: auto; border: 1px solid #ddd; }
+        code { font-family: Consolas, 'Courier New', monospace; background-color: #f4f4f4; padding: 0.2em 0.4em; border-radius: 3px;}
+        pre > code { background-color: transparent; padding: 0; border-radius: 0; border: none; } /* Fix for code within pre */
+        table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        blockquote { border-left: 4px solid #ccc; padding-left: 1em; margin-left: 0; color: #555; font-style: italic; }
+        h1, h2, h3, h4, h5, h6 { border-bottom: 1px solid #eee; padding-bottom: 0.3em; margin-top: 1.5em; }
+        img { max-width: 100%; height: auto; }
+        ul, ol { padding-left: 2em; }
+    </style>
+</head>
+<body>
+<h1>Gemini API Result</h1>
+"""
+                # Convert Markdown to HTML body (add extensions for common features)
+                html_body = markdown.markdown(markdown_content, extensions=['fenced_code', 'tables', 'sane_lists'])
+                html_foot = "</body>\n</html>"
+                full_html = html_head + html_body + html_foot
+
+                # Create a temporary HTML file in /tmp
+                # Use tempfile to securely create the file in /tmp
+                with tempfile.NamedTemporaryFile(
+                    mode='w', encoding='utf-8',
+                    prefix='gemini_html_result_', suffix=".html", # Use suffix for extension
+                    dir='/tmp', delete=False # Keep the file
+                ) as tmp_html_file:
+                    # Use codecs.open for explicit encoding control when writing
+                    with codecs.open(tmp_html_file.name, 'w', encoding='utf-8') as f_html:
+                         f_html.write(full_html)
+                    html_file_path = tmp_html_file.name # Get the actual path
+
+                log_success(f"Successfully converted response to HTML: {html_file_path}")
+                # Store the path in usage_details (already initialized)
+                usage_details['html_result_file'] = html_file_path
+
+            except ImportError:
+                 # This check might be redundant if the script exits on import error, but keep for robustness
+                 log_error("The 'markdown' library is required for HTML conversion but not installed.")
+                 log_warn("Please install it: pip install markdown")
+            except Exception as html_e:
+                log_error(f"Failed to convert response to HTML: {html_e}")
+                # html_file_path remains None
+
+            # --- END INSERTED HTML CONVERSION CODE ---
+
+
+        # --- MODIFIED BROWSER OPENING LOGIC ---
+        # Determine which file to open: prioritize HTML if conversion succeeded
+        file_to_open = html_file_path if html_file_path else final_file # Use html_file_path calculated above
+        open_target_type = "HTML result file" if html_file_path else "final response text file"
+
+        # Decide whether to attempt opening the file
+        # Open if:
+        # 1. Not in inplace mode AND a file exists to be opened.
+        # 2. In inplace mode BUT there were errors (parsing, writing, missing blocks - indicated by specific strings in result or usage_details['error']) AND a file exists.
+        should_open = False
+        if file_to_open: # Only proceed if there's actually a file path
+            if not args.inplace:
+                 should_open = True
             elif args.inplace:
-                 log_info("Skipping automatic opening of response file in browser (inplace successful).")
-            # --- End attempt to open file ---
+                 # Check for specific error indicators
+                 inplace_had_errors = (
+                     usage_details.get('error') is not None or
+                     (api_result_output and ("Fatal Error" in api_result_output or "Errors encountered" in api_result_output or "partially" in api_result_output or "Missing content block" in api_result_output))
+                 )
+                 if inplace_had_errors:
+                      should_open = True # Open the (potentially problematic) source text or the HTML version if available
+
+        if should_open:
+            log_step(f"Attempting to open {open_target_type} in browser: {file_to_open}")
+            try:
+                # Use file:// URI scheme for local files
+                file_uri = f"file://{os.path.abspath(file_to_open)}"
+                webbrowser.open(file_uri)
+                log_success(f"Opened (or attempted to open) {file_to_open} in default browser.")
+                opened_file = True
+            except Exception as wb_e:
+                log_error(f"Failed to open {open_target_type} in browser: {wb_e}")
+                # log_warn("Please open the file manually.") # Will be handled below
+        elif args.inplace and not should_open: # If inplace and no errors detected
+             log_info("Skipping automatic opening of response file in browser (inplace successful or no errors detected).")
+        # --- END MODIFIED BROWSER OPENING LOGIC ---
 
     else:
          log_error("Could not retrieve usage details.")
 
-    print(Fore.MAGENTA + "-----------------------------")
-    if not opened_file and usage_details and usage_details.get('cleaned_response_file'):
-         # Provide manual open instruction if it wasn't opened automatically and the file exists
-         final_file_path = usage_details.get('cleaned_response_file')
-         if final_file_path: # Check again it exists
-             log_warn(f"Browser could not be opened automatically or was skipped. Please open the final response file manually: {final_file_path}")
+
+    # --- MODIFIED MANUAL OPEN SUGGESTION ---
+    print(Fore.MAGENTA + "------------------------------------") # Adjusted header line
+    if not opened_file and usage_details: # Check if usage_details exists
+         # Prioritize showing HTML path if available (even if opening failed)
+         manual_open_path = usage_details.get('html_result_file') # Prefer HTML
+         if not manual_open_path:
+             manual_open_path = usage_details.get('cleaned_response_file') # Fallback to text
+
+         if manual_open_path: # Check if we have a path to suggest
+             log_warn(f"Browser could not be opened automatically or was skipped. Please open the result file manually: {manual_open_path}")
+    # --- END MODIFIED MANUAL OPEN SUGGESTION ---
 
 
     log_step("Script execution finished.")
 
+
+# --- Dependency Check at Startup ---
+try:
+    import markdown
+except ImportError:
+    init(autoreset=True) # Ensure colorama is active for the error message
+    log_error("Fatal Error: The required 'markdown' library is not installed.")
+    log_warn("Please install it using pip: pip install markdown")
+    exit(1)

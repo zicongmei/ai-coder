@@ -20,7 +20,7 @@ import codecs     # Added for writing HTML with UTF-8
 MODEL_NAME = "gemini-2.5-pro-preview-03-25"
 # Define the prompt or question you want to ask about the file contents
 # This prompt will be *appended* with format instructions when --inplace is used.
-DEFAULT_USER_PROMPT = "Return new files for removing the gateway, gcp backend, service entry, virtual service from the reconciling the service."
+# DEFAULT_USER_PROMPT = "Return new files for removing the gateway, gcp backend, service entry, virtual service from the reconciling the service." # REMOVED
 
 # Placeholder paths - **Replace these with your actual paths**
 # Used only if NO files are provided via command line OR --file-list
@@ -89,7 +89,7 @@ def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool)
 
     Args:
         file_paths: A list of paths to EXISTING source files.
-        prompt: The user's question or instruction for the API.
+        prompt: The user's question or instruction for the API. MUST NOT be empty.
         inplace: If True, request text format and attempt to modify files inplace.
 
     Returns:
@@ -108,6 +108,19 @@ def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool)
           }
     """
     log_step(f"Entering process_files_with_gemini for {len(file_paths)} files.")
+    # --- Input Validation ---
+    if not prompt:
+        err_msg = "Error: The prompt provided to process_files_with_gemini cannot be empty."
+        log_error(err_msg)
+        # Return an error state immediately
+        return err_msg, {
+            'input_tokens': 0, 'output_tokens': 0, 'cost': 0.0,
+            'api_call_duration': None, 'prompt_file_path': None,
+            'raw_response_file': None, 'cleaned_response_file': None,
+            'html_result_file': None, 'error': "Empty prompt provided."
+        }
+    # --- End Input Validation ---
+
     files_content_map = {} # Store original content mapped to absolute path
     # base_to_abs_path_map removed - no longer needed
     combined_content_for_prompt = ""
@@ -486,8 +499,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--prompt",
         type=str,
-        default=DEFAULT_USER_PROMPT,
-        help="The base prompt/instruction for the Gemini API. Format instructions are added automatically for --inplace."
+        # default=DEFAULT_USER_PROMPT, # REMOVED default
+        required=True, # ADDED required flag
+        help="The base prompt/instruction for the Gemini API (REQUIRED). Format instructions are added automatically for --inplace."
     )
     args = parser.parse_args()
     log_step("Finished parsing arguments.")
@@ -527,8 +541,12 @@ if __name__ == "__main__":
         log_info(f"No files provided, using default paths: {', '.join(source_files_to_check)}")
     log_step("Finished determining source files.")
 
-
+    # Retrieve the user prompt from arguments (now guaranteed to exist)
     user_prompt = args.prompt
+    # Check if the required prompt is empty (argparse only ensures it's provided, not non-empty)
+    if not user_prompt.strip():
+        log_error("Error: The --prompt argument was provided but is empty or contains only whitespace. Exiting.")
+        exit(1)
 
     if args.inplace:
          log_warn("\n--- Running in INPLACE mode ---")
@@ -590,25 +608,31 @@ if __name__ == "__main__":
     if usage_details: # Check if usage_details dictionary exists
         # --- Print Token/Cost Info ---
         usage_error = usage_details.get('error')
-        # Show token/cost info if no error or only metadata missing or only inplace errors
-        show_cost_info = not usage_error or "Usage metadata missing" in usage_error or args.inplace
+        # Show token/cost info if no error or only metadata missing or only inplace errors or empty prompt error
+        show_cost_info = not usage_error or "Usage metadata missing" in usage_error or args.inplace or "Empty prompt provided" in usage_error
 
         if show_cost_info:
             input_tokens_str = usage_details.get('input_tokens', 'N/A')
             output_tokens_str = usage_details.get('output_tokens', 'N/A')
             cost_str = f"${usage_details.get('cost', 0.0):.6f}" if usage_details.get('cost') is not None else "N/A"
 
-            log_info(f"Input Tokens:  {input_tokens_str}")
-            log_info(f"Output Tokens: {output_tokens_str}")
+            # Handle the case where the error was the empty prompt before the API call
+            if "Empty prompt provided" in (usage_error or ""):
+                log_warn("Input Tokens:  N/A (API call skipped due to empty prompt)")
+                log_warn("Output Tokens: N/A (API call skipped due to empty prompt)")
+                log_warn("Estimated Cost: N/A (API call skipped due to empty prompt)")
+            else:
+                log_info(f"Input Tokens:  {input_tokens_str}")
+                log_info(f"Output Tokens: {output_tokens_str}")
 
-            if "Usage metadata missing" in (usage_error or ""):
-                log_warn(f"Estimated Cost: N/A (due to missing usage metadata)")
-            elif usage_details.get('cost') is not None:
-                 log_success(f"Estimated Cost: {cost_str}")
-            else: # Should not happen if show_cost_info is true unless cost calculation failed silently
-                 log_warn(f"Estimated Cost: N/A")
+                if "Usage metadata missing" in (usage_error or ""):
+                    log_warn(f"Estimated Cost: N/A (due to missing usage metadata)")
+                elif usage_details.get('cost') is not None:
+                    log_success(f"Estimated Cost: {cost_str}")
+                else: # Should not happen if show_cost_info is true unless cost calculation failed silently
+                    log_warn(f"Estimated Cost: N/A")
 
-        # Print general error if one occurred and wasn't related to metadata/inplace
+        # Print general error if one occurred and wasn't related to metadata/inplace/empty prompt
         elif usage_error:
             log_error(f"Could not calculate usage/cost. Error: {usage_error}")
 
@@ -616,6 +640,9 @@ if __name__ == "__main__":
         duration = usage_details.get('api_call_duration')
         if duration is not None:
              log_info(f"API Call Duration: {duration:.3f} seconds")
+        elif "Empty prompt provided" in (usage_error or ""):
+             log_info("API Call Duration: N/A (API call skipped)")
+
 
         # --- Print Saved Text File Paths ---
         prompt_file = usage_details.get('prompt_file_path')
@@ -704,8 +731,9 @@ if __name__ == "__main__":
         # Open if:
         # 1. Not in inplace mode AND a file exists to be opened.
         # 2. In inplace mode BUT there were errors (parsing, writing, missing blocks - indicated by specific strings in result or usage_details['error']) AND a file exists.
+        # 3. Never open if the initial error was an empty prompt.
         should_open = False
-        if file_to_open: # Only proceed if there's actually a file path
+        if file_to_open and "Empty prompt provided" not in (usage_error or ""): # Only proceed if there's a file path and no empty prompt error
             if not args.inplace:
                  should_open = True
             elif args.inplace:
@@ -728,7 +756,7 @@ if __name__ == "__main__":
             except Exception as wb_e:
                 log_error(f"Failed to open {open_target_type} in browser: {wb_e}")
                 # log_warn("Please open the file manually.") # Will be handled below
-        elif args.inplace and not should_open: # If inplace and no errors detected
+        elif args.inplace and not should_open and "Empty prompt provided" not in (usage_error or ""): # If inplace and no errors detected and no empty prompt error
              log_info("Skipping automatic opening of response file in browser (inplace successful or no errors detected).")
         # --- END MODIFIED BROWSER OPENING LOGIC ---
 

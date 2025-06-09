@@ -12,7 +12,8 @@ import webbrowser
 import markdown
 import codecs
 
-MODEL_NAME = "gemini-2.5-pro-preview-05-06"
+MODEL_NAME_PRO = "gemini-2.5-pro-preview-05-06"
+MODEL_NAME_FLASH = "gemini-2.5-flash-preview-05-20" # New Flash model
 
 DEFAULT_SOURCE_DIR = "/usr/local/google/home/zicong/code/src/user/zicong/cloudrun-controller/internal/controller/"
 DEFAULT_SOURCE_FILES = [
@@ -21,11 +22,17 @@ DEFAULT_SOURCE_FILES = [
     DEFAULT_SOURCE_DIR + "utils.go",
 ]
 
-TOKEN_LIMIT_TIER_1 = 200000 # Tokens
-PRICE_INPUT_TIER_1 = 1.25 # Prompts <= 200k tokens
-PRICE_INPUT_TIER_2 = 2.50 # Prompts > 200k tokens
-PRICE_OUTPUT_TIER_1 = 10.00 # Prompts <= 200k tokens
-PRICE_OUTPUT_TIER_2 = 15.00 # Prompts > 200k tokens
+# Pricing for gemini-2.5-pro-preview-05-06
+TOKEN_LIMIT_TIER_1_PRO = 200000 # Tokens
+PRICE_INPUT_TIER_1_PRO = 1.25 # Prompts <= 200k tokens
+PRICE_INPUT_TIER_2_PRO = 2.50 # Prompts > 200k tokens
+PRICE_OUTPUT_TIER_1_PRO = 10.00 # Prompts <= 200k tokens
+PRICE_OUTPUT_TIER_2_PRO = 15.00 # Prompts > 200k tokens
+
+# Pricing for gemini-2.5-flash-preview-05-20 (per 1M tokens)
+PRICE_INPUT_FLASH_NON_THINKING = 0.60 # Non-thinking
+PRICE_OUTPUT_FLASH_THINKING = 3.50 # Thinking
+PRICE_INPUT_FLASH = 0.15 # Input (based on user provided price)
 
 def log_info(message):
     timestamp = time.strftime("%H:%M:%S", time.localtime())
@@ -48,7 +55,7 @@ def log_success(message):
     print(f"{Fore.GREEN}[{timestamp} OK]{Style.RESET_ALL} {message}")
 
 
-def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool) -> Tuple[str, Dict[str, Any]]:
+def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool, use_flash_model: bool) -> Tuple[str, Dict[str, Any]]:
     """
     Reads content from EXISTING files, sends it to Gemini,
     saves responses, calculates usage/cost, and either returns the
@@ -58,6 +65,7 @@ def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool)
         file_paths: A list of paths to EXISTING source files.
         prompt: The user's question or instruction for the API. MUST NOT be empty.
         inplace: If True, request text format and attempt to modify files inplace.
+        use_flash_model: If True, use the Flash model and its pricing.
 
     Returns:
         A tuple containing:
@@ -74,6 +82,9 @@ def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool)
             'raw_response_file': None, 'cleaned_response_file': None,
             'html_result_file': None, 'error': "Empty prompt provided."
         }
+
+    current_model_name = MODEL_NAME_FLASH if use_flash_model else MODEL_NAME_PRO
+    log_info(f"Using model: {current_model_name}")
 
     files_content_map = {}
     combined_content_for_prompt = ""
@@ -160,7 +171,7 @@ def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool)
     response = None
     api_duration = None
     try:
-        model = genai.GenerativeModel(MODEL_NAME)
+        model = genai.GenerativeModel(current_model_name)
 
         log_step("Estimating input tokens (client-side)...")
         try:
@@ -170,7 +181,7 @@ def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool)
         except Exception as count_e:
             log_warn(f"Could not estimate input tokens client-side: {count_e}")
 
-        log_step(f"Sending prompt to Gemini model: {MODEL_NAME}...")
+        log_step(f"Sending prompt to Gemini model: {current_model_name}...")
         start_time = time.monotonic()
         response = model.generate_content(final_prompt)
         end_time = time.monotonic()
@@ -192,14 +203,27 @@ def process_files_with_gemini(file_paths: list[str], prompt: str, inplace: bool)
             log_info(f"API Usage: Input Tokens = {input_tokens}, Output Tokens = {output_tokens}")
 
             log_step("Calculating estimated cost...")
-            if input_tokens > TOKEN_LIMIT_TIER_1:
-                input_price = PRICE_INPUT_TIER_2
-                output_price = PRICE_OUTPUT_TIER_2
-                log_info(f"Input tokens ({input_tokens}) > {TOKEN_LIMIT_TIER_1}, using Tier 2 pricing.")
-            else:
-                input_price = PRICE_INPUT_TIER_1
-                output_price = PRICE_OUTPUT_TIER_1
-                log_info(f"Input tokens ({input_tokens}) <= {TOKEN_LIMIT_TIER_1}, using Tier 1 pricing.")
+            if use_flash_model:
+                log_info(f"Using Flash model pricing.")
+                # Flash model pricing:
+                # Input (prompt): $0.15 per 1M tokens
+                # Output (non-thinking / grounded generation / embeddings): $0.60 per 1M tokens
+                # Output (thinking / non-grounded generation / chat): $3.50 per 1M tokens
+                # For simplicity, we'll use the provided "input" rate for input tokens,
+                # and assume "thinking" rate for output tokens as that's the common use case for generation.
+                input_price = PRICE_INPUT_FLASH
+                output_price = PRICE_OUTPUT_FLASH_THINKING
+                log_info(f"Flash pricing: Input=${input_price}/1M, Output (Thinking)=${output_price}/1M")
+            else: # Pro model pricing
+                log_info(f"Using Pro model pricing.")
+                if input_tokens > TOKEN_LIMIT_TIER_1_PRO:
+                    input_price = PRICE_INPUT_TIER_2_PRO
+                    output_price = PRICE_OUTPUT_TIER_2_PRO
+                    log_info(f"Input tokens ({input_tokens}) > {TOKEN_LIMIT_TIER_1_PRO}, using Tier 2 pricing for Pro.")
+                else:
+                    input_price = PRICE_INPUT_TIER_1_PRO
+                    output_price = PRICE_OUTPUT_TIER_1_PRO
+                    log_info(f"Input tokens ({input_tokens}) <= {TOKEN_LIMIT_TIER_1_PRO}, using Tier 1 pricing for Pro.")
 
             input_cost = (input_tokens / 1_000_000) * input_price
             output_cost = (output_tokens / 1_000_000) * output_price
@@ -407,9 +431,14 @@ if __name__ == "__main__":
         default=None,
         help="Your Gemini API key. If not provided, attempts to use gcloud default credentials."
     )
+    parser.add_argument(
+        "--flash",
+        action="store_true",
+        help=f"Use the {MODEL_NAME_FLASH} model instead of {MODEL_NAME_PRO}. Pricing: Input (Prompt) ${PRICE_INPUT_FLASH}/1M, Output (Non-Thinking) ${PRICE_INPUT_FLASH_NON_THINKING}/1M, Output (Thinking) ${PRICE_OUTPUT_FLASH_THINKING}/1M tokens."
+    )
     args = parser.parse_args()
     log_step("Finished parsing arguments.")
-    log_info(f"Arguments: files={args.files}, file_list={args.file_list}, inplace={args.inplace}, prompt='{args.prompt[:50]}...', api_key={'SET' if args.api_key else 'NOT SET'}")
+    log_info(f"Arguments: files={args.files}, file_list={args.file_list}, inplace={args.inplace}, flash={args.flash}, prompt='{args.prompt[:50]}...', api_key={'SET' if args.api_key else 'NOT SET'}")
 
     log_step("Attempting Authentication...")
     if args.api_key:
@@ -503,7 +532,7 @@ if __name__ == "__main__":
 
 
     log_step(f"Calling process_files_with_gemini for {len(valid_files)} valid file(s)...")
-    api_result_output, usage_details = process_files_with_gemini(valid_files, user_prompt, args.inplace)
+    api_result_output, usage_details = process_files_with_gemini(valid_files, user_prompt, args.inplace, args.flash)
     log_step("Returned from process_files_with_gemini.")
 
     print(Fore.MAGENTA + "\n--- Gemini API Result ---")

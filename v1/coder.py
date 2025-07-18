@@ -12,8 +12,8 @@ import webbrowser
 import markdown
 import codecs
 
-MODEL_NAME_PRO = "gemini-2.5-pro-preview-05-06"
-MODEL_NAME_FLASH = "gemini-2.5-flash-preview-05-20" # New Flash model
+MODEL_NAME_PRO = "gemini-2.5-pro"
+MODEL_NAME_FLASH = "gemini-2.5-flash" # New Flash model
 
 DEFAULT_SOURCE_DIR = "/usr/local/google/home/zicong/code/src/user/zicong/cloudrun-controller/internal/controller/"
 DEFAULT_SOURCE_FILES = [

@@ -15,6 +15,15 @@ type Config struct {
 }
 
 func main() {
+	// Set glog flags default *before* flag.Parse()
+	// This makes -alsologtostderr true by default, meaning logs will go to stderr and also to files.
+	// This can still be overridden by command-line arguments (e.g., -alsologtostderr=false).
+	if err := flag.Set("alsologtostderr", "true"); err != nil {
+		// In a production scenario, you might want to log this error,
+		// but flag.Set on a pre-registered flag with a valid value is unlikely to fail.
+		glog.Errorf("Failed to set default for -alsologtostderr: %v", err)
+	}
+
 	// Defer glog.Flush() to ensure all log messages are written to their destination
 	// (e.g., stderr or log file) before the application exits.
 	defer glog.Flush()

@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time" // Import the time package for timestamps
 
 	"github.com/golang/glog"
 	"github.com/zicongmei/ai-coder/v2/pkg/aiEndpoint/gemini" // Assuming Gemini is the chosen AI engine
@@ -35,6 +37,23 @@ func Run(fileListPath, userInputPrompt string, flashMode, inplace bool) error {
 	glog.V(1).Infof("Prompt generated. Total length: %d bytes.", len(fullPrompt))
 	glog.V(2).Infof("Full generated prompt (truncated): %q", utils.TruncateString(fullPrompt, 500))
 
+	// Generate dynamic file names based on current timestamp
+	timestamp := time.Now().Format("20060102_150405") // YYYYMMDD_HHMMSS
+	promptDumpFileName := fmt.Sprintf("ai_prompt_%s.txt", timestamp)
+	rawOutputDumpFileName := fmt.Sprintf("ai_raw_output_%s.txt", timestamp)
+
+	promptDumpPath := filepath.Join(os.TempDir(), promptDumpFileName)
+	rawOutputDumpPath := filepath.Join(os.TempDir(), rawOutputDumpFileName)
+
+	// Save the generated prompt to a file in /tmp
+	err = os.WriteFile(promptDumpPath, []byte(fullPrompt), 0644)
+	if err != nil {
+		glog.Errorf("Failed to save generated prompt to %q: %v", promptDumpPath, err)
+		// Do not return error, proceed with AI call as saving is a secondary feature.
+	} else {
+		glog.V(0).Infof("Generated AI prompt saved to %q", promptDumpPath)
+	}
+
 	// 3. Send the prompt to the AI endpoint
 	aiEngine, err := gemini.NewClient(flashMode) // Assuming gemini is the only AI engine for now
 	if err != nil {
@@ -49,6 +68,15 @@ func Run(fileListPath, userInputPrompt string, flashMode, inplace bool) error {
 	}
 	glog.V(1).Infof("AI responded. Response length: %d bytes.", len(aiResponse))
 	glog.V(2).Infof("Full AI response (truncated): %q", utils.TruncateString(aiResponse, 500))
+
+	// Save the raw AI output to a file in /tmp
+	err = os.WriteFile(rawOutputDumpPath, []byte(aiResponse), 0644)
+	if err != nil {
+		glog.Errorf("Failed to save raw AI output to %q: %v", rawOutputDumpPath, err)
+		// Do not return error, proceed with modification/display as saving is a secondary feature.
+	} else {
+		glog.V(0).Infof("Raw AI output saved to %q", rawOutputDumpPath)
+	}
 
 	// 4. Modify files or show response
 	if inplace {

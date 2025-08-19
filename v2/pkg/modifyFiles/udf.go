@@ -163,7 +163,7 @@ func ApplyChangesToFiles(unifiedDiff string) error {
 			return fmt.Errorf("failed to read file %q: %w", filePath, err)
 		}
 		originalContent := string(originalContentBytes)
-		glog.V(3).Infof("Read original content for %q (length: %d bytes).", filePath, len(originalContent))
+		glog.V(3).Infof("Read %d bytes from %q.", len(originalContentBytes), filePath)
 
 		// 2. Apply the diff
 		newContent, err := ApplyUnifiedDiff(originalContent, diffContent)

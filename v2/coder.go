@@ -84,7 +84,7 @@ func main() {
 	}
 	glog.V(0).Info("-------------------------------------------")
 
-	// TOD
+	// TODO
 
 	glog.V(0).Info("Coder application finished successfully.")
 }

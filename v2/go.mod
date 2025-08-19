@@ -3,9 +3,9 @@ module github.com/zicongmei/ai-coder/v2
 go 1.24.4
 
 require (
+	github.com/bluekeyes/go-gitdiff v0.8.1
 	github.com/golang/glog v1.2.5
 	github.com/google/generative-ai-go v0.20.1
-	github.com/sergi/go-diff v1.4.0
 	google.golang.org/api v0.248.0
 )
 

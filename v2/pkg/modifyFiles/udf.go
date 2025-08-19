@@ -53,9 +53,9 @@ func ApplyUnifiedDiff(originalContent string, unifiedDiff string) (string, error
 	}
 
 	finalContent := results[0]
-	glog.V(1).Infof("Unified diff applied successfully. New content length: %d", len(finalContent))
+	glog.V(1).Infof("Unified diff applied successfully.")
 
-	return finalContent, nil
+	return string(finalContent), nil
 }
 
 // parseUnifiedDiffString parses a multi-file unified diff string into a map

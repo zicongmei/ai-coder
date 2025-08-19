@@ -2,9 +2,8 @@ package main
 
 import (
 	"flag"
-	"fmt" // Import fmt for error message
-
-	"github.com/golang/glog" // Import glog
+	// Import fmt for error message
+	"github.com/golang/glog"                    // Import glog
 	"github.com/zicongmei/ai-coder/v2/pkg/flow" // Import the new flow package
 	"github.com/zicongmei/ai-coder/v2/pkg/utils"
 )

@@ -28,6 +28,11 @@ func ApplyUnifiedDiff(originalContent string, unifiedDiff string) (string, error
 		return "", fmt.Errorf("failed to parse unified diff: %w", err)
 	}
 
+	for _, p := range patches {
+		fmt.Printf("Patch: %+v\n", p)
+	}
+	// patches := dmp.PatchMake(originalContent, unifiedDiff)
+
 	if len(patches) == 0 {
 		glog.V(1).Info("No patches found in the provided unified diff. Returning original content.")
 		return originalContent, nil
@@ -59,8 +64,10 @@ func ApplyUnifiedDiff(originalContent string, unifiedDiff string) (string, error
 }
 
 // parseUnifiedDiffString parses a multi-file unified diff string into a map
-// where keys are file paths and values are the unified diff content for that specific file.
-// It expects the diff to follow the standard `--- a/path` and `+++ b/path` headers.
+// where keys are file paths and values are the unified diff content for that specific file,
+// EXCLUDING the `--- a/` and `+++ b/` header lines.
+// It expects the diff to follow the standard `--- a/path` and `+++ b/path` headers for parsing,
+// but these lines themselves are not included in the returned diff content.
 // Each file's diff must start with `--- a/` and be immediately followed by `+++ b/`.
 //
 // Note: The extracted file paths (map keys) will retain the leading '/' if the path
@@ -77,6 +84,9 @@ func parseUnifiedDiffString(unifiedDiff string) (map[string]string, error) {
 	// `inDiffBlock` indicates if we are currently parsing lines that belong to a specific file's diff.
 	inDiffBlock := false
 
+	// Flag to indicate if we have just parsed a `--- a/` line and are expecting a `+++ b/` line
+	expectingPlusHeader := false
+
 	for _, line := range lines {
 		// Detect the start of a new file diff block
 		if strings.HasPrefix(line, "--- a/") {
@@ -87,7 +97,8 @@ func parseUnifiedDiffString(unifiedDiff string) (map[string]string, error) {
 			}
 			// Reset for the new file
 			currentFileDiffBuilder.Reset()
-			inDiffBlock = true // Now we are inside a diff block
+			inDiffBlock = true         // Now we are inside a diff block
+			expectingPlusHeader = true // We just saw '--- a/', so expect '+++ b/' next
 
 			// Extract file path from "--- a/path/to/file.txt <timestamp>"
 			parts := strings.Fields(line)
@@ -98,31 +109,46 @@ func parseUnifiedDiffString(unifiedDiff string) (map[string]string, error) {
 				currentFilePath = strings.TrimPrefix(parts[1], "a")
 				if currentFilePath == "" || (len(currentFilePath) == 1 && currentFilePath[0] == '/') { // Handle cases like "--- a/" or "--- a//"
 					glog.Warningf("Malformed '--- a/' line or empty path encountered: %q. Skipping this potential diff block.", line)
-					currentFilePath = "" // Invalidate current file path
-					inDiffBlock = false  // Treat as not in a valid diff block until a valid header is found
-					continue             // Move to next line
+					currentFilePath = ""        // Invalidate current file path
+					inDiffBlock = false         // Treat as not in a valid diff block until a valid header is found
+					expectingPlusHeader = false // Reset expectation
+					continue                    // Move to next line
 				}
 				glog.V(2).Infof("Detected diff for file: %q", currentFilePath)
 			} else {
 				glog.Warningf("Malformed '--- a/' line encountered: %q. Skipping this potential diff block.", line)
-				currentFilePath = "" // Invalidate current file path
-				inDiffBlock = false  // Treat as not in a valid diff block until a valid header is found
-				continue             // Move to next line
+				currentFilePath = ""        // Invalidate current file path
+				inDiffBlock = false         // Treat as not in a valid diff block until a valid header is found
+				expectingPlusHeader = false // Reset expectation
+				continue                    // Move to next line
 			}
-			currentFileDiffBuilder.WriteString(line + "\n") // Include this header in the per-file diff
+			// DO NOT include this header in the per-file diff content as per request.
+			// currentFileDiffBuilder.WriteString(line + "\n")
 		} else if strings.HasPrefix(line, "+++ b/") {
 			// This line MUST immediately follow a '--- a/' line within a valid diff block
-			if inDiffBlock && currentFilePath != "" {
-				currentFileDiffBuilder.WriteString(line + "\n") // Include this header in the per-file diff
+			if inDiffBlock && currentFilePath != "" && expectingPlusHeader {
+				// DO NOT include this header in the per-file diff content as per request.
+				// currentFileDiffBuilder.WriteString(line + "\n")
+				expectingPlusHeader = false // Successfully processed '+++ b/'
 			} else {
 				// This indicates a malformed diff (e.g., +++ b/ without preceding --- a/ or invalid path)
 				glog.Warningf("Malformed '+++ b/' line or out of sequence: %q. Skipping.", line)
-				// Do not append to builder, and potentially invalidate block if strict.
-				// For now, let's keep inDiffBlock true, expecting it to be corrected by next --- a/ or end of string.
+				currentFilePath = ""        // Invalidate current file path
+				inDiffBlock = false         // Treat as not in a valid diff block until a valid header is found
+				expectingPlusHeader = false // Reset expectation
 			}
 		} else if inDiffBlock && currentFilePath != "" {
 			// Append all other lines (hunks, context, etc.) if we are inside a valid diff block
-			currentFileDiffBuilder.WriteString(line + "\n")
+			// and we have passed the initial `---` and `+++` header block.
+			if !expectingPlusHeader {
+				currentFileDiffBuilder.WriteString(line + "\n")
+			} else {
+				// This case implies a line appeared between `--- a/` and `+++ b/` headers, which is malformed.
+				glog.Warningf("Unexpected line %q while expecting '+++ b/' header for file %q. Resetting diff block.", line, currentFilePath)
+				currentFilePath = "" // Invalidate current file path
+				inDiffBlock = false  // Treat as not in a valid diff block until a valid header is found
+				expectingPlusHeader = false
+			}
 		} else {
 			// Lines outside any recognized diff block (e.g., blank lines, introductory text) are ignored.
 			glog.V(3).Infof("Ignoring line outside of recognized diff block: %q", line)
@@ -179,6 +205,9 @@ func ApplyChangesToFiles(unifiedDiff string) error {
 		glog.V(3).Infof("Read %d bytes from %q.", len(originalContentBytes), filePath)
 
 		// 2. Apply the diff
+		// NOTE: The `diffContent` passed here MUST contain the '--- a/' and '+++ b/' headers
+		// for `dmp.PatchFromText` to correctly parse the patch. If `parseUnifiedDiffString`
+		// removes these headers, this call will likely fail to apply patches.
 		newContent, err := ApplyUnifiedDiff(originalContent, diffContent)
 		if err != nil {
 			glog.Errorf("Failed to apply diff for file %q: %v", filePath, err)

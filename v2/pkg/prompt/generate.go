@@ -10,6 +10,7 @@ import (
 
 const (
 	additionalInstructions string = `Return the result in unified diff format. 
+Return only the unified diff, nothing else. Ensure the diff is clean in apply ready.
 Do not include any introductory text, explanations, or other formatting outside the unified diff format.`
 )
 
@@ -20,7 +21,7 @@ Do not include any introductory text, explanations, or other formatting outside 
 // 1. The user input from the argument.
 // 2. The full text of the files in the fileContents map, with start/end markers.
 // 3. A specific instruction for the AI regarding the output format.
-func GeneratePrompt(userInput string, fileContents map[string]string) string {
+func GeneratePrompt(userInput string, fileContents map[string]string, inplace bool) string {
 	glog.V(1).Info("Starting prompt generation process.")
 	glog.V(2).Infof("Received user input for prompt (truncated): %q", utils.TruncateString(userInput, 100))
 	glog.V(2).Infof("Number of files provided for prompt generation: %d", len(fileContents))
@@ -47,9 +48,11 @@ func GeneratePrompt(userInput string, fileContents map[string]string) string {
 	}
 
 	// 3. Add the instruction
-	glog.V(3).Info("Appending additional instructions for AI output format.")
-	builder.WriteString("\n") // Add a newline before the instruction for clarity
-	builder.WriteString(additionalInstructions)
+	if inplace {
+		glog.V(3).Info("Appending additional instructions for AI output format.")
+		builder.WriteString("\n") // Add a newline before the instruction for clarity
+		builder.WriteString(additionalInstructions)
+	}
 
 	finalPrompt := builder.String()
 	glog.V(1).Infof("Prompt generation complete. Final prompt length: %d bytes.", len(finalPrompt))

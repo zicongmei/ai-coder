@@ -62,6 +62,11 @@ func ApplyUnifiedDiff(originalContent string, unifiedDiff string) (string, error
 // where keys are file paths and values are the unified diff content for that specific file.
 // It expects the diff to follow the standard `--- a/path` and `+++ b/path` headers.
 // Each file's diff must start with `--- a/` and be immediately followed by `+++ b/`.
+//
+// Note: The extracted file paths (map keys) will retain the leading '/' if the path
+// in the diff header (e.g., `a/path/to/file.txt`) implies it (i.e., `a/` is trimmed,
+// leaving `/path/to/file.txt`). This means `ApplyChangesToFiles` will attempt to
+// read these paths as absolute from the filesystem root or as intended by `os.ReadFile`.
 func parseUnifiedDiffString(unifiedDiff string) (map[string]string, error) {
 	fileDiffs := make(map[string]string)
 	lines := strings.Split(unifiedDiff, "\n")
@@ -88,7 +93,15 @@ func parseUnifiedDiffString(unifiedDiff string) (map[string]string, error) {
 			parts := strings.Fields(line)
 			if len(parts) >= 2 {
 				// The path is the second field, e.g., "a/path/to/file.txt"
-				currentFilePath = strings.TrimPrefix(parts[1], "a/")
+				// Trim "a" prefix; this leaves a leading "/" if present in the original path.
+				// E.g., "a/foo/bar.txt" becomes "/foo/bar.txt". "a//tmp/foo.txt" becomes "//tmp/foo.txt".
+				currentFilePath = strings.TrimPrefix(parts[1], "a")
+				if currentFilePath == "" || (len(currentFilePath) == 1 && currentFilePath[0] == '/') { // Handle cases like "--- a/" or "--- a//"
+					glog.Warningf("Malformed '--- a/' line or empty path encountered: %q. Skipping this potential diff block.", line)
+					currentFilePath = "" // Invalidate current file path
+					inDiffBlock = false  // Treat as not in a valid diff block until a valid header is found
+					continue             // Move to next line
+				}
 				glog.V(2).Infof("Detected diff for file: %q", currentFilePath)
 			} else {
 				glog.Warningf("Malformed '--- a/' line encountered: %q. Skipping this potential diff block.", line)

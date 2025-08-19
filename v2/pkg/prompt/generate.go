@@ -3,6 +3,8 @@ package prompt
 import (
 	"fmt"
 	"strings"
+
+	"github.com/golang/glog" // Import glog
 )
 
 const (
@@ -18,15 +20,21 @@ Do not include any introductory text, explanations, or other formatting outside 
 // 2. The full text of the files in the fileContents map, with start/end markers.
 // 3. A specific instruction for the AI regarding the output format.
 func GeneratePrompt(userInput string, fileContents map[string]string) string {
+	glog.V(1).Info("Starting prompt generation process.")
+	glog.V(2).Infof("Received user input for prompt (truncated): %q", truncateString(userInput, 100))
+	glog.V(2).Infof("Number of files provided for prompt generation: %d", len(fileContents))
+
 	var builder strings.Builder
 
 	// 1. Add the user input
+	glog.V(3).Info("Appending user input to the prompt.")
 	builder.WriteString(userInput)
 	builder.WriteString("\n") // Add a newline after user input for separation
 
 	// 2. Add the full text of the files
 	// Iterating through the map. The order of files in the prompt will depend on map iteration order.
 	for filePath, content := range fileContents {
+		glog.V(2).Infof("Adding file %q (length: %d characters) to the prompt.", filePath, len(content))
 		builder.WriteString(fmt.Sprintf("\n--- Start of File: %s ---\n", filePath))
 		builder.WriteString(content)
 		// Ensure the last line of content has a newline if it doesn't already, to prevent
@@ -38,8 +46,24 @@ func GeneratePrompt(userInput string, fileContents map[string]string) string {
 	}
 
 	// 3. Add the instruction
-	builder.WriteString("\n")                   // Add a newline before the instruction for clarity
-	builder.WriteString(additionalInstructions) // Fixed typo: changed addadditionalInstructions to additionalInstructions
+	glog.V(3).Info("Appending additional instructions for AI output format.")
+	builder.WriteString("\n") // Add a newline before the instruction for clarity
+	builder.WriteString(additionalInstructions)
 
-	return builder.String()
+	finalPrompt := builder.String()
+	glog.V(1).Infof("Prompt generation complete. Final prompt length: %d bytes.", len(finalPrompt))
+	// Log the full generated prompt only at a very high verbosity level, as it can be very large.
+	glog.V(4).Infof("Full generated prompt content: %q", finalPrompt)
+
+	return finalPrompt
+}
+
+// truncateString is a helper function to shorten long strings for logging,
+// preventing log lines from becoming excessively long.
+// (Note: In a larger project, this would typically be in a shared utility package).
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

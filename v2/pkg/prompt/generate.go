@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/golang/glog" // Import glog
+	"github.com/zicongmei/ai-coder/v2/pkg/utils"
 )
 
 const (
@@ -21,7 +22,7 @@ Do not include any introductory text, explanations, or other formatting outside 
 // 3. A specific instruction for the AI regarding the output format.
 func GeneratePrompt(userInput string, fileContents map[string]string) string {
 	glog.V(1).Info("Starting prompt generation process.")
-	glog.V(2).Infof("Received user input for prompt (truncated): %q", truncateString(userInput, 100))
+	glog.V(2).Infof("Received user input for prompt (truncated): %q", utils.TruncateString(userInput, 100))
 	glog.V(2).Infof("Number of files provided for prompt generation: %d", len(fileContents))
 
 	var builder strings.Builder
@@ -56,14 +57,4 @@ func GeneratePrompt(userInput string, fileContents map[string]string) string {
 	glog.V(4).Infof("Full generated prompt content: %q", finalPrompt)
 
 	return finalPrompt
-}
-
-// truncateString is a helper function to shorten long strings for logging,
-// preventing log lines from becoming excessively long.
-// (Note: In a larger project, this would typically be in a shared utility package).
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }

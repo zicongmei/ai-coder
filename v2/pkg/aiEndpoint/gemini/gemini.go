@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/golang/glog"
-	"github.com/zicongmei/ai-coder/v2/pkg/aiEndpoint"
-
 	"github.com/google/generative-ai-go/genai"
+	"github.com/zicongmei/ai-coder/v2/pkg/aiEndpoint"
+	"github.com/zicongmei/ai-coder/v2/pkg/utils"
 	"google.golang.org/api/option"
 )
 
@@ -44,13 +44,12 @@ func NewClient(flash bool) (aiEndpoint.AIEngine, error) {
 	// be managed at a higher level (e.g., in `main` function with `defer client.Close()`).
 	glog.V(0).Info("Gemini client successfully created.")
 
-	modelName := "gemini-pro"
+	modelName := "gemini-2.5-pro"
 	if flash {
-		modelName = "gemini-pro-flash"
-		glog.V(0).Info("Using 'gemini-pro-flash' model.")
-	} else {
-		glog.V(0).Info("Using 'gemini-pro' model.")
+		modelName = "gemini-2.5-flash"
 	}
+
+	glog.V(0).Infof("Using %q model.", modelName)
 
 	model := client.GenerativeModel(modelName)
 
@@ -64,7 +63,7 @@ func NewClient(flash bool) (aiEndpoint.AIEngine, error) {
 // the AI's response as a string.
 func (c *Client) SendPrompt(prompt string) (string, error) {
 	glog.V(1).Info("Sending prompt to Gemini AI...")
-	glog.V(2).Infof("Prompt content (truncated): %q", truncateString(prompt, 200))
+	glog.V(2).Infof("Prompt content (truncated): %q", utils.TruncateString(prompt, 200))
 
 	resp, err := c.model.GenerateContent(c.ctx, genai.Text(prompt))
 	if err != nil {
@@ -89,17 +88,7 @@ func (c *Client) SendPrompt(prompt string) (string, error) {
 
 	result := sb.String()
 	glog.V(1).Infof("Received response from Gemini (length: %d).", len(result))
-	glog.V(2).Infof("Full Gemini response (truncated): %q", truncateString(result, 200))
+	glog.V(2).Infof("Full Gemini response (truncated): %q", utils.TruncateString(result, 200))
 
 	return result, nil
-}
-
-// truncateString is a helper function to shorten long strings for logging,
-// preventing log lines from becoming excessively long.
-// (Copied here for self-containment, but ideally would be in a shared utility package).
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }

@@ -4,6 +4,7 @@ import (
 	"flag"
 
 	"github.com/golang/glog" // Import glog
+	"github.com/zicongmei/ai-coder/v2/pkg/utils"
 )
 
 // Config holds the command-line arguments for the coder application.
@@ -76,7 +77,7 @@ func main() {
 	glog.V(0).Info("\n--- Placeholder for actual AI coding logic ---")
 	glog.V(0).Infof("Logic will read files from: %q", cfg.FileList)
 	// Log a truncated version of the prompt to avoid excessively long log lines for the actual call.
-	glog.V(0).Infof("Logic will send prompt to AI (excerpt): %q...", truncateString(cfg.Prompt, 50))
+	glog.V(0).Infof("Logic will send prompt to AI (excerpt): %q...", utils.TruncateString(cfg.Prompt, 50))
 	if cfg.Inplace {
 		glog.V(0).Info("Logic will modify files in place.")
 	} else {
@@ -87,13 +88,4 @@ func main() {
 	// TODO
 
 	glog.V(0).Info("Coder application finished successfully.")
-}
-
-// truncateString is a helper function to shorten long strings for logging,
-// preventing log lines from becoming excessively long.
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }

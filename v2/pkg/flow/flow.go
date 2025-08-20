@@ -18,11 +18,11 @@ import (
 // Run executes the main AI coding flow.
 // It creates a prompt, sends it to the AI, and then either modifies files in-place
 // or prints the AI's response (unified diff) to stdout.
-func Run(fileListPath, userInputPrompt string, flashMode, inplace bool) error {
+func Run(fileListPath, userInputPrompt string, flashMode, returnUDF, inplace bool) error {
 	glog.V(0).Info("Starting AI coding flow.")
 	glog.V(1).Infof("File List Path: %q", fileListPath)
 	glog.V(1).Infof("User Prompt (truncated): %q", utils.TruncateString(userInputPrompt, 100))
-	glog.V(1).Infof("Flash Mode: %t, In-place: %t", flashMode, inplace)
+	glog.V(1).Infof("Flash Mode: %t, Return UDF: %t, In-place: %t", flashMode, returnUDF, inplace)
 
 	// 1. Read files and their contents
 	fileContents, err := readFiles(fileListPath)
@@ -33,7 +33,7 @@ func Run(fileListPath, userInputPrompt string, flashMode, inplace bool) error {
 	glog.V(1).Infof("Successfully read %d files for prompt generation.", len(fileContents))
 
 	// 2. Create the prompt
-	fullPrompt := prompt.GeneratePrompt(userInputPrompt, fileContents, inplace)
+	fullPrompt := prompt.GeneratePrompt(userInputPrompt, fileContents, returnUDF)
 	glog.V(1).Infof("Prompt generated. Total length: %d bytes.", len(fullPrompt))
 	glog.V(2).Infof("Full generated prompt (truncated): %q", utils.TruncateString(fullPrompt, 500))
 
@@ -90,14 +90,22 @@ func Run(fileListPath, userInputPrompt string, flashMode, inplace bool) error {
 	// 4. Modify files or show response
 	if inplace {
 		glog.V(0).Info("In-place modification requested. Applying changes to files.")
-		err = modifyFiles.ApplyChangesToFiles(aiResponse)
+		if returnUDF {
+			err = modifyFiles.ApplyChangesToFiles(aiResponse) // Applies unified diff
+		} else {
+			err = modifyFiles.ApplyFullTextChangesToFiles(aiResponse) // Applies full text content
+		}
 		if err != nil {
 			glog.Errorf("Failed to apply changes to files in-place: %v", err)
 			return fmt.Errorf("failed to apply changes: %w", err)
 		}
 		glog.V(0).Info("Files modified successfully in-place.")
 	} else {
-		glog.V(0).Info("In-place modification not requested. Displaying AI response (unified diff):")
+		if returnUDF {
+			glog.V(0).Info("In-place modification not requested. Displaying AI response (unified diff):")
+		} else {
+			glog.V(0).Info("In-place modification not requested. Displaying AI response (full text of modified files):")
+		}
 		fmt.Println(aiResponse)
 		glog.V(0).Info("AI response displayed.")
 	}

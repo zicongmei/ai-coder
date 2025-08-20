@@ -8,16 +8,6 @@ import (
 )
 
 var (
-	additionalInstructionsUDF string = `
-* Important:    
-1. Return the result in unified diff format. 
-2. Return only the unified diff, nothing else. Ensure the diff is clean in apply ready.
-3. Do not include any introductory, explanations, or other text other than the unified diff format.
-4. Carefully calculate the line numbers in the unified diff format to ensure they match the original files.
-5. Always return the absulute path in the diff header.
-6. The input files has the absolute path.
-`
-
 	additionalInstructionsFullText string = `
 * Important:
 1. Do not include any introductory text, explanations, or other formatting outside of these start/end blocks. 
@@ -41,16 +31,10 @@ var (
 // 1. The user input from the argument.
 // 2. The full text of the files in the fileContents map, with start/end markers.
 // 3. A specific instruction for the AI regarding the output format (unified diff or full text).
-func GeneratePrompt(userInput string, fileContents map[string]string, returnUDF, inplace bool) string {
+func GeneratePrompt(userInput string, fileContents map[string]string, inplace bool) string {
 	glog.V(1).Info("Starting prompt generation process.")
 	glog.V(2).Infof("Received user input for prompt (truncated): %q", utils.TruncateString(userInput, 100))
 	glog.V(2).Infof("Number of files provided for prompt generation: %d", len(fileContents))
-	glog.V(2).Infof("AI response format requested: %s", func() string {
-		if returnUDF {
-			return "Unified Diff"
-		}
-		return "Full Text"
-	}())
 
 	var builder strings.Builder
 
@@ -77,11 +61,7 @@ func GeneratePrompt(userInput string, fileContents map[string]string, returnUDF,
 	if inplace {
 		glog.V(3).Info("Appending additional instructions for AI output format.")
 		builder.WriteString("\n") // Add a newline before the instruction for clarity
-		if returnUDF {
-			builder.WriteString(additionalInstructionsUDF)
-		} else {
-			builder.WriteString(additionalInstructionsFullText)
-		}
+		builder.WriteString(additionalInstructionsFullText)
 	}
 
 	finalPrompt := builder.String()

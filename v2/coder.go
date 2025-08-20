@@ -16,7 +16,6 @@ type Config struct {
 	Flash    bool   // Whether to use flash mode
 	Inplace  bool   // Whether to modify the files in place
 	Prompt   string // The prompt to send to the AI
-	UDF      bool   // Whether to ask LLM to return unified diff format. If false, full text of modified files.
 }
 
 func main() {
@@ -40,7 +39,6 @@ func main() {
 	flag.BoolVar(&cfg.Flash, "flash", false, "Use flash mode for AI interaction")
 	flag.BoolVar(&cfg.Inplace, "inplace", false, "Modify the files in place (requires --file-list)")
 	flag.StringVar(&cfg.Prompt, "prompt", "", "The prompt string to send to the AI")
-	flag.BoolVar(&cfg.UDF, "udf", false, "Request unified diff format from LLM and apply as diff. If false, request full text and apply as full text.")
 
 	// Parse the flags. This single call parses both custom flags and glog's flags.
 	flag.Parse()
@@ -74,7 +72,6 @@ func main() {
 	glog.V(0).Infof("  File List: %q", cfg.FileList)
 	glog.V(0).Infof("  Flash Mode: %t", cfg.Flash)
 	glog.V(0).Infof("  In-place Modification: %t", cfg.Inplace)
-	glog.V(0).Infof("  Return Unified Diff Format: %t", cfg.UDF) // New config log
 	glog.V(0).Infof("  Prompt provided (length: %d characters).", len(cfg.Prompt))
 	// Log the full prompt content at a higher verbosity level for debugging purposes.
 	glog.V(2).Infof("  Full Prompt Content: %q", cfg.Prompt)
@@ -89,16 +86,11 @@ func main() {
 	} else {
 		glog.V(0).Info("Logic will output modified content (not in-place).")
 	}
-	glog.V(0).Infof("AI response format will be: %s", func() string {
-		if cfg.UDF {
-			return "Unified Diff"
-		}
-		return "Full Text"
-	}())
+
 	glog.V(0).Info("-------------------------------------------")
 
 	// Call the new flow.Run function to execute the main logic
-	if err := flow.Run(cfg.FileList, cfg.Prompt, cfg.Flash, cfg.UDF, cfg.Inplace); err != nil {
+	if err := flow.Run(cfg.FileList, cfg.Prompt, cfg.Flash, cfg.Inplace); err != nil {
 		glog.Errorf("AI coding flow failed: %v", err)
 		os.Exit(1)
 	}

@@ -33,7 +33,7 @@ func Run(fileListPath, userInputPrompt string, flashMode, returnUDF, inplace boo
 	glog.V(1).Infof("Successfully read %d files for prompt generation.", len(fileContents))
 
 	// 2. Create the prompt
-	fullPrompt := prompt.GeneratePrompt(userInputPrompt, fileContents, returnUDF)
+	fullPrompt := prompt.GeneratePrompt(userInputPrompt, fileContents, returnUDF, inplace)
 	glog.V(1).Infof("Prompt generated. Total length: %d bytes.", len(fullPrompt))
 	glog.V(2).Infof("Full generated prompt (truncated): %q", utils.TruncateString(fullPrompt, 500))
 

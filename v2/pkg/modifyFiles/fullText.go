@@ -11,83 +11,92 @@ import (
 
 // ApplyFullTextChangesToFiles parses the AI response containing full text of modified files
 // and writes the content to the respective files on disk.
-// The AI response is expected to be in the format:
-// == Begin of /path/to/file ==
-// file content
-// == End of /path/to/file ==
+// The AI response is expected to be formatted with explicit BEGIN_OF_FILE and END_OF_FILE
+// markers, matching the constants defined in prompt/generate.go.
+// Example format:
+// --- BEGIN_OF_FILE: /path/to/file1 ---
+// {content for /path/to/file1}
+// --- END_OF_FILE: /path/to/file1 ---
 func ApplyFullTextChangesToFiles(fullTextResponse string) error {
 	fullTextResponse = cleanAIMarkdown(fullTextResponse) // Use common markdown cleaner
 
-	// Ensure the response is trimmed to avoid issues with leading/trailing newlines
+	// Trim leading/trailing whitespace (including newlines) from the entire response.
+	// This helps in handling potential preamble/postamble from the LLM that isn't part of the structured file content.
 	fullTextResponse = strings.TrimSpace(fullTextResponse)
 
 	fullTextPath := "/tmp/fullTextChanges.txt"
 	err := os.WriteFile(fullTextPath, []byte(fullTextResponse), 0644)
 	if err != nil {
 		glog.Errorf("Failed to write full text response to %s: %v", fullTextPath, err)
-		return fmt.Errorf("failed to write %s: %v", fullTextPath, err)
+		return fmt.Errorf("failed to write %s: %w", fullTextPath, err)
 	}
 	glog.V(2).Infof("Full text response written to %s", fullTextPath)
 
-	// Split the response by the file begin marker
-	// This approach assumes that a file's content doesn't contain the begin marker itself.
-	// We'll split by "== Begin of " and then process each block.
-	// The first split might yield an empty string if the response starts with a marker.
-	blocks := strings.Split(fullTextResponse, "== Begin of ")
-	if len(blocks) <= 1 { // Need at least one "== Begin of " to have a file block
-		if len(blocks) == 1 && strings.Contains(blocks[0], "== End of ") {
-			// This could be a single file response without the initial split creating an empty block.
-			// Proceed, but log a warning if it doesn't match the expected multi-block pattern.
-			glog.Warningf("AI response for full text changes might be malformed or contain only one file without initial '== Begin of' split artifact.")
-		} else {
-			glog.Errorf("AI response for full text changes did not contain expected file markers or was empty after sanitization.")
-			return fmt.Errorf("invalid full text response format: no file begin markers found")
-		}
-	}
+	remainingResponse := fullTextResponse
+	foundAnyFile := false
 
-	for _, block := range blocks {
-		block = strings.TrimSpace(block)
-		if block == "" {
-			continue // Skip empty blocks from initial split (e.g., before the first "== Begin of ")
+	for {
+		// Find the start of the next file block
+		beginIndex := strings.Index(remainingResponse, utils.BeginMarkerPrefix)
+		if beginIndex == -1 {
+			break // No more begin markers found
 		}
 
-		// Each block should start with '/path/to/file ==\n' and end with '== End of /path/to/file =='
-		// Find the first " ==" to get the file path.
-		pathEndIndex := strings.Index(block, " ==\n")
-		if pathEndIndex == -1 {
-			glog.Warningf("Skipping malformed block: %s (no path end marker ' ==\\n')", utils.TruncateString(block, 200))
-			continue
+		// The path starts immediately after `beginMarkerPrefix`
+		pathStartInRemaining := beginIndex + len(utils.BeginMarkerPrefix)
+
+		// The path ends before `beginMarkerSuffix`
+		pathEndInSegment := strings.Index(remainingResponse[pathStartInRemaining:], utils.BeginMarkerSuffix)
+		if pathEndInSegment == -1 {
+			glog.Warningf("Malformed BEGIN_OF_FILE marker: missing suffix %q near %q. Skipping remaining response.",
+				utils.BeginMarkerSuffix, utils.TruncateString(remainingResponse[beginIndex:], 100))
+			break // Malformed marker, cannot parse further
 		}
 
-		filePath := block[:pathEndIndex]
-		contentStart := pathEndIndex + len(" ==\n")
+		filePath := strings.TrimSpace(remainingResponse[pathStartInRemaining : pathStartInRemaining+pathEndInSegment])
 
-		// Find the end marker
-		endMarker := fmt.Sprintf("== End of %s ==\n", filePath) // Add newline for robustness
-		contentEndIndex := strings.LastIndex(block, endMarker)
+		// Content starts immediately after the full begin marker
+		contentStartIndex := pathStartInRemaining + pathEndInSegment + len(utils.BeginMarkerSuffix)
 
-		if contentEndIndex == -1 {
-			// Try without newline at the end of endMarker, in case LLM omits it
-			endMarker = fmt.Sprintf("== End of %s ==", filePath)
-			contentEndIndex = strings.LastIndex(block, endMarker)
-			if contentEndIndex == -1 {
-				glog.Warningf("Skipping malformed block for file %q: no end marker found. Block: %s", filePath, utils.TruncateString(block, 200))
-				continue
+		// Construct the full end marker string for this specific file
+		fullEndMarker := fmt.Sprintf("%s%s%s", utils.EndMarkerPrefix, filePath, utils.EndMarkerSuffix)
+
+		// Search for the end marker in the portion of the response *after* the content started
+		endIndexInContentSegment := strings.Index(remainingResponse[contentStartIndex:], fullEndMarker)
+
+		// Robustness: try matching the end marker without the final trailing newline, as LLMs can sometimes omit it.
+		// This must be a distinct marker string to ensure correct length calculation later.
+		if endIndexInContentSegment == -1 {
+			fullEndMarkerNoTrailingNewline := fmt.Sprintf("%s%s ---", utils.EndMarkerPrefix, filePath)
+			endIndexInContentSegment = strings.Index(remainingResponse[contentStartIndex:], fullEndMarkerNoTrailingNewline)
+			// If found, update `fullEndMarker` so its length is correct for advancing `remainingResponse`
+			if endIndexInContentSegment != -1 {
+				fullEndMarker = fullEndMarkerNoTrailingNewline
 			}
 		}
 
-		// Extract the actual file content
-		fileContent := block[contentStart:contentEndIndex]
-		// Trim any leading/trailing newlines that might be artifacts of the markers
-		fileContent = strings.TrimSpace(fileContent)
+		if endIndexInContentSegment == -1 {
+			glog.Warningf("Malformed or missing END_OF_FILE marker for %q. Expected %q or %q near %q. Skipping this file and remainder.",
+				filePath,
+				fmt.Sprintf("%s%s%s", utils.EndMarkerPrefix, filePath, utils.EndMarkerSuffix),
+				fmt.Sprintf("%s%s ---", utils.EndMarkerPrefix, filePath),
+				utils.TruncateString(remainingResponse[contentStartIndex:], 100))
+			break // Cannot find end marker, break from loop
+		}
+
+		// Extract the file content
+		fileContent := remainingResponse[contentStartIndex : contentStartIndex+endIndexInContentSegment]
+
+		// The prompt generator adds newlines around content (e.g., `\n---BEGIN---\ncontent\n---END---\n`).
+		// `os.WriteFile` will write exactly the extracted content. No `TrimSpace` here to preserve
+		// legitimate leading/trailing blank lines or newlines within the actual file content.
 
 		glog.V(2).Infof("Attempting to write %d bytes to file: %q", len(fileContent), filePath)
+		glog.V(3).Infof("File content for %q (truncated): %q", filePath, utils.TruncateString(fileContent, 200))
 
-		// Ensure the file exists before writing. If not, maybe it's a new file?
-		// For now, assume it's modifying existing files as per problem statement's context.
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			glog.Warningf("File %q specified in AI response does not exist on disk. Creating it.", filePath)
-			// Decide if creating new files is desired. For now, let's allow it with a warning.
+			// For new files, 0644 permission is fine.
 		} else if err != nil {
 			glog.Errorf("Error checking file %q before writing: %v", filePath, err)
 			return fmt.Errorf("error checking file %q: %w", filePath, err)
@@ -99,6 +108,17 @@ func ApplyFullTextChangesToFiles(fullTextResponse string) error {
 			return fmt.Errorf("failed to write content to file %q: %w", filePath, err)
 		}
 		glog.V(0).Infof("Successfully updated file: %q", filePath)
+		foundAnyFile = true
+
+		// Advance `remainingResponse` past the current file's block for the next iteration
+		remainingResponse = remainingResponse[contentStartIndex+endIndexInContentSegment+len(fullEndMarker):]
+	}
+
+	if !foundAnyFile {
+		glog.Warning("AI response for full text changes did not contain any correctly formatted file blocks.")
+		// Consider if a hard error is necessary here depending on expected behavior.
+		// For now, a warning is kept to allow partial success in case of malformed output.
+		return fmt.Errorf("no valid file blocks found in AI response")
 	}
 
 	return nil

@@ -1,16 +1,15 @@
 package prompt
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/golang/glog" // Import glog
 	"github.com/zicongmei/ai-coder/v2/pkg/utils"
 )
 
-const (
+var (
 	additionalInstructionsUDF string = `
-* Important:	
+* Important:    
 1. Return the result in unified diff format. 
 2. Return only the unified diff, nothing else. Ensure the diff is clean in apply ready.
 3. Do not include any introductory, explanations, or other text other than the unified diff format.
@@ -20,13 +19,18 @@ const (
 `
 
 	additionalInstructionsFullText string = `
-* Important:	
-1. Return the result in full text for modifed files. 
-2. Return only the files content, nothing else. Ensure the files content is clean in apply ready.
-3. Do not include any introductory, explanations, or other text other than the files content.
-4. Seperate each file content with a == Begin of /path/to/file == header and == End of /path/to/file == footer.
-5. Always return the absulute path in the file header.
-6. The input files has the absolute path.
+* Important:
+1. Do not include any introductory text, explanations, or other formatting outside of these start/end blocks. 
+2. Ensure the ABSOLUTE file paths in the start/end markers match the requested files.
+3. don't return the diff. return the full text
+4. Respond ONLY with the complete content for each modifed file, formatted exactly as follows, using the ABSOLUTE file paths provided:
+--- BEGIN_OF_FILE: /abs/path/file1 ---
+{content for /abs/path/file1}
+--- END_OF_FILE: /abs/path/file1 ---
+--- BEGIN_OF_FILE: /abs/path/file2 ---
+{content for /abs/path/file2}
+--- END_OF_FILE: /abs/path/file2 ---
+...
 `
 )
 
@@ -36,11 +40,17 @@ const (
 // The prompt will contain:
 // 1. The user input from the argument.
 // 2. The full text of the files in the fileContents map, with start/end markers.
-// 3. A specific instruction for the AI regarding the output format.
-func GeneratePrompt(userInput string, fileContents map[string]string, inplace bool) string {
+// 3. A specific instruction for the AI regarding the output format (unified diff or full text).
+func GeneratePrompt(userInput string, fileContents map[string]string, returnUDF, inplace bool) string {
 	glog.V(1).Info("Starting prompt generation process.")
 	glog.V(2).Infof("Received user input for prompt (truncated): %q", utils.TruncateString(userInput, 100))
 	glog.V(2).Infof("Number of files provided for prompt generation: %d", len(fileContents))
+	glog.V(2).Infof("AI response format requested: %s", func() string {
+		if returnUDF {
+			return "Unified Diff"
+		}
+		return "Full Text"
+	}())
 
 	var builder strings.Builder
 
@@ -53,21 +63,25 @@ func GeneratePrompt(userInput string, fileContents map[string]string, inplace bo
 	// Iterating through the map. The order of files in the prompt will depend on map iteration order.
 	for filePath, content := range fileContents {
 		glog.V(2).Infof("Adding file %q (length: %d characters) to the prompt.", filePath, len(content))
-		builder.WriteString(fmt.Sprintf("\n--- Start of File: %s ---\n", filePath))
+		builder.WriteString(utils.BeginMarkerPrefix + filePath + utils.BeginMarkerSuffix)
 		builder.WriteString(content)
 		// Ensure the last line of content has a newline if it doesn't already, to prevent
 		// the file end marker from being on the same line.
 		if !strings.HasSuffix(content, "\n") {
 			builder.WriteString("\n")
 		}
-		builder.WriteString(fmt.Sprintf("--- End of File: %s ---\n", filePath))
+		builder.WriteString(utils.EndMarkerPrefix + filePath + utils.EndMarkerSuffix)
 	}
 
-	// 3. Add the instruction
+	// 3. Add the instruction based on the requested output format
 	if inplace {
 		glog.V(3).Info("Appending additional instructions for AI output format.")
 		builder.WriteString("\n") // Add a newline before the instruction for clarity
-		builder.WriteString(additionalInstructionsUDF)
+		if returnUDF {
+			builder.WriteString(additionalInstructionsUDF)
+		} else {
+			builder.WriteString(additionalInstructionsFullText)
+		}
 	}
 
 	finalPrompt := builder.String()

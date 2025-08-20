@@ -9,13 +9,23 @@ import (
 )
 
 const (
-	additionalInstructions string = `
+	additionalInstructionsUDF string = `
 * Important:	
 1. Return the result in unified diff format. 
 2. Return only the unified diff, nothing else. Ensure the diff is clean in apply ready.
 3. Do not include any introductory, explanations, or other text other than the unified diff format.
-4. Carefully calculate the line numbers in the diff to ensure they match the original and new files.
+4. Carefully calculate the line numbers in the unified diff format to ensure they match the original files.
 5. Always return the absulute path in the diff header.
+6. The input files has the absolute path.
+`
+
+	additionalInstructionsFullText string = `
+* Important:	
+1. Return the result in full text for modifed files. 
+2. Return only the files content, nothing else. Ensure the files content is clean in apply ready.
+3. Do not include any introductory, explanations, or other text other than the files content.
+4. Seperate each file content with a == Begin of /path/to/file == header and == End of /path/to/file == footer.
+5. Always return the absulute path in the file header.
 6. The input files has the absolute path.
 `
 )
@@ -57,7 +67,7 @@ func GeneratePrompt(userInput string, fileContents map[string]string, inplace bo
 	if inplace {
 		glog.V(3).Info("Appending additional instructions for AI output format.")
 		builder.WriteString("\n") // Add a newline before the instruction for clarity
-		builder.WriteString(additionalInstructions)
+		builder.WriteString(additionalInstructionsUDF)
 	}
 
 	finalPrompt := builder.String()

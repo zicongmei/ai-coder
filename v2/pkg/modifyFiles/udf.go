@@ -37,18 +37,33 @@ func ApplyChangesToFiles(unifiedDiff string) error {
 			filePath = filePath[2:]
 		}
 
-		glog.V(2).Infof("File changed: %s", filePath)
 		targetFile, _ := os.Open(filePath)
 		defer targetFile.Close()
-		if err := gitdiff.Apply(&output, targetFile, file); err != nil {
-			glog.Errorf("Failed to apply git diff for file %q: %v", filePath, err)
-			return fmt.Errorf("failed to apply git diff: %v", err)
+		glog.V(3).Infof("Opened file %s for modification", filePath)
+
+		applier := gitdiff.NewTextApplier(&output, targetFile)
+		for i, frag := range file.TextFragments {
+			glog.V(3).Infof("Fragment #%d: %s", i, frag.String())
+			if err := applier.ApplyFragment(frag); err != nil {
+				return fmt.Errorf("failed to apply fragment %d: %v", i, err)
+			}
+			glog.V(3).Infof("Applied fragment %d to file %s", i, filePath)
 		}
+		err = applier.Close()
+		if err != nil {
+			return fmt.Errorf("failed to close applier: %v", err)
+		}
+
+		// if err := gitdiff.Apply(&output, targetFile, file); err != nil {
+		// 	glog.Errorf("Failed to apply git diff for file %q: %v", filePath, err)
+		// 	return fmt.Errorf("failed to apply git diff: %v", err)
+		// }
 		err = os.WriteFile(filePath, output.Bytes(), 0644)
 		if err != nil {
 			glog.Errorf("Failed to write file %q: %v", filePath, err)
 			return fmt.Errorf("failed to write file %q: %v", filePath, err)
 		}
+		glog.V(2).Infof("Modified content written to %s", filePath)
 	}
 	return nil
 }

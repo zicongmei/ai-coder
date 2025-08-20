@@ -9,4 +9,7 @@ type AIEngine interface {
 	// the AI's response as a string.
 	// It should also return an error if the communication or AI processing fails.
 	SendPrompt(prompt string) (string, error)
+
+	// CountTokens estimates the number of tokens in the given prompt string.
+	CountTokens(prompt string) (int, error)
 }

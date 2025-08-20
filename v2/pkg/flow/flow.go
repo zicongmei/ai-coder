@@ -61,6 +61,15 @@ func Run(fileListPath, userInputPrompt string, flashMode, inplace bool) error {
 		return fmt.Errorf("failed to initialize AI engine: %w", err)
 	}
 
+	// Calculate and log token count *before* sending the prompt
+	tokenCount, err := aiEngine.CountTokens(fullPrompt)
+	if err != nil {
+		glog.Warningf("Could not calculate input token count: %v", err)
+		// Continue even if token count fails, as sending the prompt is still possible.
+	} else {
+		glog.V(0).Infof("Input prompt token count: %d tokens.", tokenCount)
+	}
+
 	aiResponse, err := aiEngine.SendPrompt(fullPrompt)
 	if err != nil {
 		glog.Errorf("Failed to get response from AI: %v", err)

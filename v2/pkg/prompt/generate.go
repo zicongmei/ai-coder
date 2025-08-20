@@ -9,9 +9,11 @@ import (
 )
 
 const (
-	additionalInstructions string = `Return the result in unified diff format. 
-Return only the unified diff, nothing else. Ensure the diff is clean in apply ready.
-Do not include any introductory text, explanations, or other formatting outside the unified diff format.`
+	additionalInstructions string = `
+* Important:	
+1. Return the result in unified diff format. 
+2. Return only the unified diff, nothing else. Ensure the diff is clean in apply ready.
+3. Do not include any introductory, explanations, or other text other than the unified diff format.`
 )
 
 // GeneratePrompt constructs a complete AI prompt based on user input,

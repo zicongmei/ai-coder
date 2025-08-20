@@ -92,3 +92,9 @@ func (c *Client) SendPrompt(prompt string) (string, error) {
 
 	return result, nil
 }
+
+// CountTokens estimates the number of tokens in the given prompt string using the Gemini model.
+func (c *Client) CountTokens(prompt string) (int, error) {
+	glog.V(1).Info("Counting tokens for prompt using Gemini model.")
+	return CountTokens(c.ctx, c.model, prompt)
+}

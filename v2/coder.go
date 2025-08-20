@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"os"
+
 	// Import fmt for error message
 	"github.com/golang/glog"                    // Import glog
 	"github.com/zicongmei/ai-coder/v2/pkg/flow" // Import the new flow package
@@ -88,7 +90,8 @@ func main() {
 
 	// Call the new flow.Run function to execute the main logic
 	if err := flow.Run(cfg.FileList, cfg.Prompt, cfg.Flash, cfg.Inplace); err != nil {
-		glog.Fatalf("AI coding flow failed: %v", err)
+		glog.Errorf("AI coding flow failed: %v", err)
+		os.Exit(1)
 	}
 
 	glog.V(0).Info("Coder application finished successfully.")

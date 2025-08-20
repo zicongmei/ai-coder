@@ -15,9 +15,17 @@ import (
 // applies the diffs, and writes the modified content back to disk.
 func ApplyChangesToFiles(unifiedDiff string) error {
 	unifiedDiff = sanitizeResponse(unifiedDiff)
+	udfPath := "/tmp/unifiedDiff.txt"
+	err := os.WriteFile(udfPath, []byte(unifiedDiff), 0644)
+	if err != nil {
+		glog.Errorf("Failed to write unified diff to %s: %v", udfPath, err)
+		return fmt.Errorf("failed to write %s: %v", udfPath, err)
+	}
+	glog.V(2).Infof("Unified diff written to %s", udfPath)
 	reader := strings.NewReader(unifiedDiff)
 	files, _, err := gitdiff.Parse(reader)
 	if err != nil {
+		glog.Errorf("Failed to parse git diff: %v", err)
 		return fmt.Errorf("failed to parse git diff: %v", err)
 	}
 
@@ -33,10 +41,12 @@ func ApplyChangesToFiles(unifiedDiff string) error {
 		targetFile, _ := os.Open(filePath)
 		defer targetFile.Close()
 		if err := gitdiff.Apply(&output, targetFile, file); err != nil {
+			glog.Errorf("Failed to apply git diff for file %q: %v", filePath, err)
 			return fmt.Errorf("failed to apply git diff: %v", err)
 		}
 		err = os.WriteFile(filePath, output.Bytes(), 0644)
 		if err != nil {
+			glog.Errorf("Failed to write file %q: %v", filePath, err)
 			return fmt.Errorf("failed to write file %q: %v", filePath, err)
 		}
 	}

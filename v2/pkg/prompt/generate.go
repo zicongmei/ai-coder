@@ -14,13 +14,13 @@ var (
 2. Ensure the ABSOLUTE file paths in the start/end markers match the requested files.
 3. don't return the diff. return the full text
 4. Respond ONLY with the complete content for each modifed file, formatted exactly as follows, using the ABSOLUTE file paths provided:
---- BEGIN_OF_FILE: /abs/path/file1 ---
+` + utils.BeginMarkerPrefix + "/abs/path/file1" + utils.BeginMarkerSuffix + `
 {content for /abs/path/file1}
---- END_OF_FILE: /abs/path/file1 ---
---- BEGIN_OF_FILE: /abs/path/file2 ---
+` + utils.EndMarkerPrefix + "/abs/path/file1" + utils.EndMarkerSuffix + `
+` + utils.BeginMarkerPrefix + "/abs/path/file2" + utils.BeginMarkerSuffix + `
 {content for /abs/path/file2}
---- END_OF_FILE: /abs/path/file2 ---
-...
+` + utils.EndMarkerPrefix + "/abs/path/file2" + utils.EndMarkerSuffix + `
+... and so on for all modified files.
 `
 )
 

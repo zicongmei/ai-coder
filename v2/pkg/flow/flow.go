@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/zicongmei/ai-coder/v2/pkg/aiEndpoint/gemini" // Assuming Gemini is the chosen AI engine
+	"github.com/zicongmei/ai-coder/v2/pkg/display"           // Import the display package
 	"github.com/zicongmei/ai-coder/v2/pkg/modifyFiles"
 	"github.com/zicongmei/ai-coder/v2/pkg/prompt"
 	"github.com/zicongmei/ai-coder/v2/pkg/utils" // For TruncateString
@@ -97,9 +98,18 @@ func Run(fileListPath, userInputPrompt string, flashMode, inplace bool) error {
 		}
 		glog.V(0).Info("Files modified successfully in-place.")
 	} else {
-		glog.V(0).Info("In-place modification not requested. Displaying AI response (full text of modified files):")
-		fmt.Println(aiResponse)
-		glog.V(0).Info("AI response displayed.")
+		glog.V(0).Info("In-place modification not requested. Saving and displaying AI response in browser.")
+		// The prompt.GeneratePrompt function does NOT add explicit formatting instructions
+		// for AI output when `inplace` is false. Therefore, the `aiResponse` here is
+		// the raw, unformatted AI output based on the initial prompt.
+		// We use a generic HTML display function for this raw text.
+		err = display.SaveAndOpenAIResponseAsHTML(aiResponse)
+		if err != nil {
+			glog.Errorf("Failed to display AI response in browser: %v", err)
+			// Return error because displaying the result is the primary action when not in-place.
+			return fmt.Errorf("failed to display AI response: %w", err)
+		}
+		glog.V(0).Info("AI response saved to file and opened in browser.")
 	}
 
 	glog.V(0).Info("AI coding flow completed.")

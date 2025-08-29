@@ -1,6 +1,6 @@
 package utils
 
-const BeginMarkerPrefix = "--- BEGIN_OF_FILE: "
+const BeginMarkerPrefix = "--- Start of File: "
 const BeginMarkerSuffix = " ---\n"
-const EndMarkerPrefix = "\n--- END_OF_FILE: "
+const EndMarkerPrefix = "\n--- End of File: "
 const EndMarkerSuffix = " ---\n"

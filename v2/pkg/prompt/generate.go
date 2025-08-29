@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/golang/glog" // Import glog
@@ -9,18 +10,9 @@ import (
 
 var (
 	additionalInstructionsFullText string = `
-* Important:
-1. Do not include any introductory text, explanations, or other formatting outside of these start/end blocks. 
-2. Ensure the ABSOLUTE file paths in the start/end markers match the requested files.
-3. don't return the diff. return the full text
-4. Respond ONLY with the complete content for each modifed file, formatted exactly as follows, using the ABSOLUTE file paths provided:
-` + utils.BeginMarkerPrefix + "/abs/path/file1" + utils.BeginMarkerSuffix + `
-{content for /abs/path/file1}
-` + utils.EndMarkerPrefix + "/abs/path/file1" + utils.EndMarkerSuffix + `
-` + utils.BeginMarkerPrefix + "/abs/path/file2" + utils.BeginMarkerSuffix + `
-{content for /abs/path/file2}
-` + utils.EndMarkerPrefix + "/abs/path/file2" + utils.EndMarkerSuffix + `
-... and so on for all modified files.
+
+Do not include any introductory text, explanations, or other formatting outside of these BEGIN/END blocks. 
+Ensure the ABSOLUTE file paths in the BEGIN/END markers match the requested files: 
 `
 )
 
@@ -49,19 +41,29 @@ func GeneratePrompt(userInput string, fileContents map[string]string, inplace bo
 		glog.V(2).Infof("Adding file %q (length: %d characters) to the prompt.", filePath, len(content))
 		builder.WriteString(utils.BeginMarkerPrefix + filePath + utils.BeginMarkerSuffix)
 		builder.WriteString(content)
-		// Ensure the last line of content has a newline if it doesn't already, to prevent
-		// the file end marker from being on the same line.
-		if !strings.HasSuffix(content, "\n") {
-			builder.WriteString("\n")
-		}
+		// // Ensure the last line of content has a newline if it doesn't already, to prevent
+		// // the file end marker from being on the same line.
+		// if !strings.HasSuffix(content, "\n") {
+		// 	builder.WriteString("\n")
+		// }
 		builder.WriteString(utils.EndMarkerPrefix + filePath + utils.EndMarkerSuffix)
 	}
 
 	// 3. Add the instruction based on the requested output format
 	if inplace {
 		glog.V(3).Info("Appending additional instructions for AI output format.")
+		builder.WriteString("\nIMPORTANT: Respond ONLY with the complete, modified content for each file, formatted exactly as follows, using the ABSOLUTE file paths provided:\n")
+		allPaths := []string{}
+		for filePath, _ := range fileContents {
+			builder.WriteString(utils.BeginMarkerPrefix + filePath + utils.BeginMarkerSuffix)
+			builder.WriteString(fmt.Sprintf("{content for %s}", filePath))
+			builder.WriteString(utils.EndMarkerPrefix + filePath + utils.EndMarkerSuffix)
+			allPaths = append(allPaths, filePath)
+		}
 		builder.WriteString("\n") // Add a newline before the instruction for clarity
 		builder.WriteString(additionalInstructionsFullText)
+		builder.WriteString(strings.Join(allPaths, ", "))
+
 	}
 
 	finalPrompt := builder.String()

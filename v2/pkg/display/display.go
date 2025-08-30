@@ -1,8 +1,8 @@
 package display
 
 import (
-	"fmt"
-	"html" // Import html package to escape content for display in browser
+	"bytes"
+	"fmt" // Import html package to escape content for display in browser
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/yuin/goldmark"
 )
 
 // SaveAndOpenDiffAsMarkdown saves the provided AI response (expected to be a unified diff)
@@ -24,7 +25,7 @@ func SaveAndOpenDiffAsMarkdown(aiResponse string) error {
 	filePath := filepath.Join(os.TempDir(), fileName)
 
 	// Format the content as a Markdown code block for diff highlighting
-	markdownContent := fmt.Sprintf("```diff\n%s\n```\n", aiResponse)
+	markdownContent := aiResponse
 
 	// Write the content to the file
 	err := os.WriteFile(filePath, []byte(markdownContent), 0644)
@@ -32,7 +33,7 @@ func SaveAndOpenDiffAsMarkdown(aiResponse string) error {
 		glog.Errorf("Failed to save AI response to Markdown file %q: %v", filePath, err)
 		return fmt.Errorf("failed to save AI response: %w", err)
 	}
-	glog.V(0).Infof("AI response (unified diff) saved to %q", filePath)
+	glog.V(0).Infof("AI response saved to %q", filePath)
 
 	// Determine the command to open the file based on the operating system
 	var cmd *exec.Cmd
@@ -74,9 +75,11 @@ func SaveAndOpenAIResponseAsHTML(aiResponse string) error {
 	fileName := fmt.Sprintf("ai_raw_response_%s.html", timestamp)
 	filePath := filepath.Join(os.TempDir(), fileName)
 
-	// HTML escape the AI response to ensure it's displayed literally and doesn't break HTML structure.
-	escapedResponse := html.EscapeString(aiResponse)
-
+	var buf bytes.Buffer
+	if err := goldmark.Convert([]byte(aiResponse), &buf); err != nil {
+		// Handle error
+		panic(err)
+	}
 	// Format the content as a basic HTML page.
 	// Using <pre> tags to preserve whitespace, newlines, and fixed-width font.
 	// Basic CSS is included for better readability.
@@ -93,11 +96,9 @@ func SaveAndOpenAIResponseAsHTML(aiResponse string) error {
     </style>
 </head>
 <body>
-    <h1>AI Coder Raw Response</h1>
-    <div class="timestamp">Generated: %s</div>
-    <p>%s</p>
+    %s
 </body>
-</html>`, time.Now().Format("January 2, 2006 at 3:04 PM MST"), escapedResponse)
+</html>`, buf.String())
 
 	// Write the content to the file
 	err := os.WriteFile(filePath, []byte(htmlContent), 0644)

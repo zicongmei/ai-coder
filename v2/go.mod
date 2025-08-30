@@ -5,6 +5,7 @@ go 1.24.4
 require (
 	github.com/golang/glog v1.2.5
 	github.com/google/generative-ai-go v0.20.1
+	github.com/yuin/goldmark v1.7.13
 	google.golang.org/api v0.248.0
 )
 

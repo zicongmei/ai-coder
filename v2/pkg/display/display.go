@@ -13,18 +13,15 @@ import (
 	"github.com/yuin/goldmark"
 )
 
-// SaveAndOpenDiffAsMarkdown saves the provided AI response (expected to be a unified diff)
+// SaveAndOpenAsMarkdown saves the provided AI response
 // to a Markdown file in /tmp and attempts to open it in the default web browser.
-// The diff content is wrapped in a Markdown code block with 'diff' highlighting.
-func SaveAndOpenDiffAsMarkdown(aiResponse string) error {
+func SaveAndOpenAsMarkdown(aiResponse string) error {
 	glog.V(1).Info("Preparing to save AI response as Markdown and open in browser.")
 
 	// Generate a unique filename using a timestamp
 	timestamp := time.Now().Format("20060102_150405") // YYYYMMDD_HHMMSS
-	fileName := fmt.Sprintf("ai_response_diff_%s.md", timestamp)
+	fileName := fmt.Sprintf("ai_response_%s.md", timestamp)
 	filePath := filepath.Join(os.TempDir(), fileName)
-
-	// Format the content as a Markdown code block for diff highlighting
 	markdownContent := aiResponse
 
 	// Write the content to the file

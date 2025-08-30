@@ -12,6 +12,7 @@ var (
 	additionalInstructionsFullText string = `
 
 Do not include any introductory text, explanations, or other formatting outside of these BEGIN/END blocks. 
+Always return full text. Never return diff.
 Ensure the ABSOLUTE file paths in the BEGIN/END markers match the requested files: 
 `
 )
@@ -22,7 +23,7 @@ Ensure the ABSOLUTE file paths in the BEGIN/END markers match the requested file
 // The prompt will contain:
 // 1. The user input from the argument.
 // 2. The full text of the files in the fileContents map, with start/end markers.
-// 3. A specific instruction for the AI regarding the output format (unified diff or full text).
+// 3. A specific instruction for the AI regarding the output format.
 func GeneratePrompt(userInput string, fileContents map[string]string, inplace bool) string {
 	glog.V(1).Info("Starting prompt generation process.")
 	glog.V(2).Infof("Received user input for prompt (truncated): %q", utils.TruncateString(userInput, 100))

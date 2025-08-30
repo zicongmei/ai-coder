@@ -18,7 +18,7 @@ import (
 
 // Run executes the main AI coding flow.
 // It creates a prompt, sends it to the AI, and then either modifies files in-place
-// or prints the AI's response (unified diff) to stdout.
+// or prints the AI's response to stdout.
 func Run(fileListPath, userInputPrompt string, flashMode, inplace bool) error {
 	glog.V(0).Info("Starting AI coding flow.")
 	glog.V(1).Infof("File List Path: %q", fileListPath)

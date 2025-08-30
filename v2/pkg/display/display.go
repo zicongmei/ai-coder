@@ -88,12 +88,6 @@ func SaveAndOpenAIResponseAsHTML(aiResponse string) error {
 <head>
     <meta charset="utf-8">
     <title>AI Coder Raw Response</title>
-    <style>
-        body { font-family: monospace; white-space: pre-wrap; word-wrap: break-word; background-color: #f0f0f0; padding: 20px; }
-        pre { background-color: #ffffff; border: 1px solid #ccc; padding: 15px; overflow-x: auto; }
-        h1 { color: #333; }
-        .timestamp { font-size: 0.9em; color: #777; margin-bottom: 10px; }
-    </style>
 </head>
 <body>
     %s

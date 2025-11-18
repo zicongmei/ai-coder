@@ -22,7 +22,7 @@ type Client struct {
 // It uses an API key from GEMINI_API_KEY environment variable if set,
 // otherwise it attempts to use Application Default Credentials (ADC).
 // The 'flash' parameter determines which model to use (gemini-pro-flash vs gemini-pro).
-func NewClient(flash bool) (aiEndpoint.AIEngine, error) {
+func NewClient(modelName string) (aiEndpoint.AIEngine, error) {
 	ctx := context.Background()
 	var opts []option.ClientOption
 
@@ -43,11 +43,6 @@ func NewClient(flash bool) (aiEndpoint.AIEngine, error) {
 	// doesn't expose a Close method. For long-running applications, the client should
 	// be managed at a higher level (e.g., in `main` function with `defer client.Close()`).
 	glog.V(0).Info("Gemini client successfully created.")
-
-	modelName := "gemini-2.5-pro"
-	if flash {
-		modelName = "gemini-2.5-flash"
-	}
 
 	glog.V(0).Infof("Using %q model.", modelName)
 

@@ -14,6 +14,7 @@ import (
 type Config struct {
 	FileList string // Path to a file containing a list of files to process
 	Flash    bool   // Whether to use flash mode
+	Model    string // Model to use
 	Inplace  bool   // Whether to modify the files in place
 	Prompt   string // The prompt to send to the AI
 }
@@ -36,7 +37,8 @@ func main() {
 
 	// Define command-line flags. glog also registers its own flags (e.g., -v, -logtostderr).
 	flag.StringVar(&cfg.FileList, "file-list", "", "Path to a file containing a list of files to process")
-	flag.BoolVar(&cfg.Flash, "flash", false, "Use flash mode for AI interaction")
+	flag.BoolVar(&cfg.Flash, "flash", false, "[Deprecated] Use flash mode for AI interaction")
+	flag.StringVar(&cfg.Model, "model", "gemini-3-pro-preview", "Model to use")
 	flag.BoolVar(&cfg.Inplace, "inplace", false, "Modify the files in place (requires --file-list)")
 	flag.StringVar(&cfg.Prompt, "prompt", "", "The prompt string to send to the AI")
 
@@ -71,6 +73,12 @@ func main() {
 	glog.V(0).Infof("Coder application starting with the following configuration:")
 	glog.V(0).Infof("  File List: %q", cfg.FileList)
 	glog.V(0).Infof("  Flash Mode: %t", cfg.Flash)
+	if cfg.Flash {
+		cfg.Model = "gemini-2.5-flash"
+		glog.V(0).Infof("Replace model to %q due to flash mode.", cfg.Model)
+	}
+	glog.V(0).Infof("  Model: %q", cfg.Model)
+
 	glog.V(0).Infof("  In-place Modification: %t", cfg.Inplace)
 	glog.V(0).Infof("  Prompt provided (length: %d characters).", len(cfg.Prompt))
 	// Log the full prompt content at a higher verbosity level for debugging purposes.
@@ -90,7 +98,7 @@ func main() {
 	glog.V(0).Info("-------------------------------------------")
 
 	// Call the new flow.Run function to execute the main logic
-	if err := flow.Run(cfg.FileList, cfg.Prompt, cfg.Flash, cfg.Inplace); err != nil {
+	if err := flow.Run(cfg.FileList, cfg.Prompt, cfg.Model, cfg.Inplace); err != nil {
 		glog.Errorf("AI coding flow failed: %v", err)
 		os.Exit(1)
 	}

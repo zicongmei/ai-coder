@@ -3,14 +3,25 @@ package gemini
 import (
 	"context"
 	"fmt"
+
 	"github.com/golang/glog"
-	"github.com/google/generative-ai-go/genai" // Import genai
+	"google.golang.org/genai"
 )
 
 // CountTokens estimates the number of tokens in the given text using the provided Gemini model.
-func CountTokens(ctx context.Context, model *genai.GenerativeModel, text string) (int, error) {
+func CountTokens(ctx context.Context, client *genai.Client, modelName string, text string) (int, error) {
 	glog.V(1).Info("Requesting token count for prompt.")
-	resp, err := model.CountTokens(ctx, genai.Text(text))
+
+	contents := []*genai.Content{
+		{
+			Parts: []*genai.Part{
+				{Text: text},
+			},
+			Role: "user",
+		},
+	}
+
+	resp, err := client.Models.CountTokens(ctx, modelName, contents, nil)
 	if err != nil {
 		glog.Errorf("Failed to count tokens: %v", err)
 		return 0, fmt.Errorf("failed to count tokens: %w", err)

@@ -3,19 +3,18 @@ package gemini
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/golang/glog"
-	"github.com/google/generative-ai-go/genai"
 	"github.com/zicongmei/ai-coder/v2/pkg/aiEndpoint"
 	"github.com/zicongmei/ai-coder/v2/pkg/utils"
-	"google.golang.org/api/option"
+	"google.golang.org/genai"
 )
 
 // Client implements the AIEngine interface for the Gemini AI.
 type Client struct {
-	model *genai.GenerativeModel
-	ctx   context.Context // Context for API calls
+	client    *genai.Client
+	modelName string
+	ctx       context.Context // Context for API calls
 }
 
 // NewClient initializes a new Gemini AI client.
@@ -24,17 +23,20 @@ type Client struct {
 // The 'flash' parameter determines which model to use (gemini-pro-flash vs gemini-pro).
 func NewClient(modelName string) (aiEndpoint.AIEngine, error) {
 	ctx := context.Background()
-	var opts []option.ClientOption
+
+	cfg := &genai.ClientConfig{
+		HTTPOptions: genai.HTTPOptions{APIVersion: "v1"},
+	}
 
 	apiKey := GetAPIKey() // Use the auth.go function
 	if apiKey != "" {
-		opts = append(opts, option.WithAPIKey(apiKey))
+		cfg.APIKey = apiKey
 		glog.V(1).Info("Gemini client initializing with API key.")
 	} else {
 		glog.V(1).Info("GEMINI_API_KEY not set. Attempting to use Application Default Credentials (ADC).")
 	}
 
-	client, err := genai.NewClient(ctx, opts...)
+	client, err := genai.NewClient(ctx, cfg)
 	if err != nil {
 		glog.Errorf("Failed to create Gemini client: %v", err)
 		return nil, fmt.Errorf("failed to create Gemini client: %w", err)
@@ -46,11 +48,10 @@ func NewClient(modelName string) (aiEndpoint.AIEngine, error) {
 
 	glog.V(0).Infof("Using %q model.", modelName)
 
-	model := client.GenerativeModel(modelName)
-
 	return &Client{
-		model: model,
-		ctx:   ctx,
+		client:    client,
+		modelName: modelName,
+		ctx:       ctx,
 	}, nil
 }
 
@@ -60,28 +61,26 @@ func (c *Client) SendPrompt(prompt string) (string, error) {
 	glog.V(1).Info("Sending prompt to Gemini AI...")
 	glog.V(2).Infof("Prompt content (truncated): %q", utils.TruncateString(prompt, 200))
 
-	resp, err := c.model.GenerateContent(c.ctx, genai.Text(prompt))
+	contents := []*genai.Content{
+		{
+			Parts: []*genai.Part{
+				{Text: prompt},
+			},
+			Role: "user",
+		},
+	}
+
+	resp, err := c.client.Models.GenerateContent(c.ctx, c.modelName, contents, nil)
 	if err != nil {
 		glog.Errorf("Failed to generate content from Gemini: %v", err)
 		return "", fmt.Errorf("failed to generate content from Gemini: %w", err)
 	}
 
-	if resp == nil || len(resp.Candidates) == 0 {
-		glog.Warning("Gemini response was empty or contained no candidates.")
-		return "", fmt.Errorf("Gemini returned an empty response or no candidates")
+	result := resp.Text()
+	if result == "" {
+		glog.Warning("Gemini response was empty.")
 	}
 
-	// Concatenate all parts from the first candidate
-	var sb strings.Builder
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if text, ok := part.(genai.Text); ok {
-			sb.WriteString(string(text))
-		} else {
-			glog.Warningf("Received non-text part in Gemini response: %T", part)
-		}
-	}
-
-	result := sb.String()
 	glog.V(1).Infof("Received response from Gemini (length: %d).", len(result))
 	glog.V(2).Infof("Full Gemini response (truncated): %q", utils.TruncateString(result, 200))
 
@@ -91,5 +90,5 @@ func (c *Client) SendPrompt(prompt string) (string, error) {
 // CountTokens estimates the number of tokens in the given prompt string using the Gemini model.
 func (c *Client) CountTokens(prompt string) (int, error) {
 	glog.V(1).Info("Counting tokens for prompt using Gemini model.")
-	return CountTokens(c.ctx, c.model, prompt)
+	return CountTokens(c.ctx, c.client, c.modelName, prompt)
 }

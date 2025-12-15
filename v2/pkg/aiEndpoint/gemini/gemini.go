@@ -50,13 +50,23 @@ func NewClient(modelName string, toolsCSV string) (aiEndpoint.AIEngine, error) {
 
 	// Parse tools
 	var tools []string
-	if toolsCSV != "" {
+	if strings.ToLower(toolsCSV) == "all" {
+		tools = []string{"google-search", "url-context"}
+	} else if toolsCSV != "" {
 		parts := strings.Split(toolsCSV, ",")
 		for _, p := range parts {
 			t := strings.TrimSpace(p)
 			if t != "" {
 				tools = append(tools, t)
 			}
+		}
+	}
+
+	// Disable tools for Gemini 2.5 models
+	if strings.Contains(modelName, "gemini-2.5") {
+		if len(tools) > 0 {
+			glog.Warningf("Tools usage is disabled for model %q. Ignoring tools: %v", modelName, tools)
+			tools = []string{}
 		}
 	}
 

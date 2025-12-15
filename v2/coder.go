@@ -42,7 +42,7 @@ func main() {
 	flag.StringVar(&cfg.Model, "model", "gemini-3-pro-preview", "Model to use")
 	flag.BoolVar(&cfg.Inplace, "inplace", false, "Modify the files in place (requires --file-list)")
 	flag.StringVar(&cfg.Prompt, "prompt", "", "The prompt string to send to the AI")
-	flag.StringVar(&cfg.Tools, "tools", "", "Comma-separated list of tools to enable (e.g., 'google-search,url-context')")
+	flag.StringVar(&cfg.Tools, "tools", "", "Comma-separated list of tools to enable (e.g., 'google-search,url-context' or 'all')")
 
 	// Parse the flags. This single call parses both custom flags and glog's flags.
 	flag.Parse()

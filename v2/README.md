@@ -72,7 +72,7 @@ go run . --prompt "<prompt_text>" --file-list <path_to_file_list> [--inplace] [-
 *   `--file-list <path>` (**REQUIRED**): Path to a file containing a list of source file paths (one per line).
 *   `--inplace` (optional, **DANGEROUS!**): If set, the application will attempt to parse the Gemini response (expecting a specific format with **absolute file paths**) and overwrite the original source files. **BACK UP YOUR FILES FIRST!**
 *   `--flash` (optional): If set, uses the `gemini-2.5-flash` model for potentially faster, cheaper responses, at the possible expense of quality. By default, `gemini-2.5-pro` is used.
-*   `--tools <list>` (optional): Comma-separated list of tools to enable (e.g., `google-search,url-context`). Allows the model to retrieve external information.
+*   `--tools <list>` (optional): Comma-separated list of tools to enable (e.g., `google-search,url-context` or `all`). Allows the model to retrieve external information. **Note:** Tools are disabled for `gemini-2.5` models.
 
 ## Examples
 

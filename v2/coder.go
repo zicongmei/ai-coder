@@ -12,12 +12,12 @@ import (
 
 // Config holds the command-line arguments for the coder application.
 type Config struct {
-	FileList     string // Path to a file containing a list of files to process
-	Flash        bool   // Whether to use flash mode
-	Model        string // Model to use
-	Inplace      bool   // Whether to modify the files in place
-	Prompt       string // The prompt to send to the AI
-	GoogleSearch bool   // Enable Google Search tool
+	FileList string // Path to a file containing a list of files to process
+	Flash    bool   // Whether to use flash mode
+	Model    string // Model to use
+	Inplace  bool   // Whether to modify the files in place
+	Prompt   string // The prompt to send to the AI
+	Tools    string // Comma-separated list of tools to enable
 }
 
 func main() {
@@ -42,7 +42,7 @@ func main() {
 	flag.StringVar(&cfg.Model, "model", "gemini-3-pro-preview", "Model to use")
 	flag.BoolVar(&cfg.Inplace, "inplace", false, "Modify the files in place (requires --file-list)")
 	flag.StringVar(&cfg.Prompt, "prompt", "", "The prompt string to send to the AI")
-	flag.BoolVar(&cfg.GoogleSearch, "google-search", false, "Enable Google Search tool for Gemini")
+	flag.StringVar(&cfg.Tools, "tools", "", "Comma-separated list of tools to enable (e.g., 'google-search,url-context')")
 
 	// Parse the flags. This single call parses both custom flags and glog's flags.
 	flag.Parse()
@@ -80,7 +80,7 @@ func main() {
 		glog.V(0).Infof("Replace model to %q due to flash mode.", cfg.Model)
 	}
 	glog.V(0).Infof("  Model: %q", cfg.Model)
-	glog.V(0).Infof("  Google Search Enabled: %t", cfg.GoogleSearch)
+	glog.V(0).Infof("  Tools: %q", cfg.Tools)
 
 	glog.V(0).Infof("  In-place Modification: %t", cfg.Inplace)
 	glog.V(0).Infof("  Prompt provided (length: %d characters).", len(cfg.Prompt))
@@ -101,7 +101,7 @@ func main() {
 	glog.V(0).Info("-------------------------------------------")
 
 	// Call the new flow.Run function to execute the main logic
-	if err := flow.Run(cfg.FileList, cfg.Prompt, cfg.Model, cfg.Inplace, cfg.GoogleSearch); err != nil {
+	if err := flow.Run(cfg.FileList, cfg.Prompt, cfg.Model, cfg.Inplace, cfg.Tools); err != nil {
 		glog.Errorf("AI coding flow failed: %v", err)
 		os.Exit(1)
 	}

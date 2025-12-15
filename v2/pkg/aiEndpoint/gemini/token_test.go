@@ -14,8 +14,8 @@ func TestCountTokens_Integration(t *testing.T) {
 	}
 
 	// Use NewClient to create the AI client with gemini-2.5-flash model.
-	// Passing 'true' for 'flash' parameter selects "gemini-2.5-flash".
-	aiEngine, err := NewClient("gemini-2.5-flash", false)
+	// Passing empty string for tools.
+	aiEngine, err := NewClient("gemini-2.5-flash", "")
 	if err != nil {
 		t.Fatalf("Failed to create Gemini client using NewClient for test: %v", err)
 	}

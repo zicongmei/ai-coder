@@ -1,4 +1,3 @@
-
 # AI Coder
 
 This application leverages Google's Gemini large language models to analyze and potentially modify source code files based on a user-provided prompt. It can read multiple files, send their content along with instructions to the Gemini API, calculate token usage, and either display the AI's response or attempt to modify the original files in-place. The application also supports generating an HTML version of the Gemini response for easier viewing.
@@ -10,7 +9,7 @@ This application leverages Google's Gemini large language models to analyze and 
 *   **Prioritized Authentication:** Uses Google Cloud Application Default Credentials (ADC) by default, or an API key provided via the `GEMINI_API_KEY` environment variable.
 *   Calculates estimated API usage token count.
 *   Optional in-place file modification (`--inplace`) using a specific text format requiring **absolute file paths** (**Use with extreme caution!**).
-*   **Google Search Integration:** Optionally enable the Google Search tool (`--google-search`) to allow the model to fetch real-time information.
+*   **Tool Integration:** Optionally enable tools like Google Search and URL Context via `--tools`.
 *   Saves the generated prompt (`ai_prompt_*.txt`) and the raw AI output (`ai_raw_output_*.txt`) to temporary files (in `/tmp`) for inspection.
 *   Provides detailed logging using `glog`, outputting to stderr by default (and optionally to files).
 *   Converts AI's raw response (which is often Markdown) to HTML for non-inplace operations.
@@ -62,9 +61,9 @@ This application leverages Google's Gemini large language models to analyze and 
 The recommended way to use the application is with a file list for specifying source files and relying on Google Cloud ADC or the `GEMINI_API_KEY` environment variable for authentication. In-place modification should be used cautiously.
 
 ```bash
-./coder --prompt "<prompt_text>" --file-list <path_to_file_list> [--inplace] [--flash] [--google-search]
+./coder --prompt "<prompt_text>" --file-list <path_to_file_list> [--inplace] [--flash] [--tools=google-search,url-context]
 # Or using go run:
-go run . --prompt "<prompt_text>" --file-list <path_to_file_list> [--inplace] [--flash] [--google-search]
+go run . --prompt "<prompt_text>" --file-list <path_to_file_list> [--inplace] [--flash] [--tools=google-search,url-context]
 ```
 
 **Key Arguments:**
@@ -73,7 +72,7 @@ go run . --prompt "<prompt_text>" --file-list <path_to_file_list> [--inplace] [-
 *   `--file-list <path>` (**REQUIRED**): Path to a file containing a list of source file paths (one per line).
 *   `--inplace` (optional, **DANGEROUS!**): If set, the application will attempt to parse the Gemini response (expecting a specific format with **absolute file paths**) and overwrite the original source files. **BACK UP YOUR FILES FIRST!**
 *   `--flash` (optional): If set, uses the `gemini-2.5-flash` model for potentially faster, cheaper responses, at the possible expense of quality. By default, `gemini-2.5-pro` is used.
-*   `--google-search` (optional): If set, enables the Google Search tool for the Gemini model, allowing it to retrieve external information (e.g., current documentation, recent events) to ground its response.
+*   `--tools <list>` (optional): Comma-separated list of tools to enable (e.g., `google-search,url-context`). Allows the model to retrieve external information.
 
 ## Examples
 

@@ -19,13 +19,13 @@ import (
 // Run executes the main AI coding flow.
 // It creates a prompt, sends it to the AI, and then either modifies files in-place
 // or prints the AI's response to stdout.
-func Run(fileListPath, userInputPrompt, modelName string, inplace, enableGoogleSearch bool) error {
+func Run(fileListPath, userInputPrompt, modelName string, inplace bool, tools string) error {
 	glog.V(0).Info("Starting AI coding flow.")
 	glog.V(1).Infof("File List Path: %q", fileListPath)
 	glog.V(1).Infof("User Prompt (truncated): %q", utils.TruncateString(userInputPrompt, 100))
 	glog.V(1).Infof("Model: %q", modelName)
 	glog.V(1).Infof("In-place: %t", inplace)
-	glog.V(1).Infof("Google Search: %t", enableGoogleSearch)
+	glog.V(1).Infof("Tools: %q", tools)
 
 	// 1. Read files and their contents
 	fileContents, err := readFiles(fileListPath)
@@ -58,7 +58,7 @@ func Run(fileListPath, userInputPrompt, modelName string, inplace, enableGoogleS
 	}
 
 	// 3. Send the prompt to the AI endpoint
-	aiEngine, err := gemini.NewClient(modelName, enableGoogleSearch) // Assuming gemini is the only AI engine for now
+	aiEngine, err := gemini.NewClient(modelName, tools) // Assuming gemini is the only AI engine for now
 	if err != nil {
 		glog.Errorf("Failed to initialize AI engine: %v", err)
 		return fmt.Errorf("failed to initialize AI engine: %w", err)

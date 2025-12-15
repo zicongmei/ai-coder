@@ -13,17 +13,17 @@ import (
 
 // Client implements the AIEngine interface for the Gemini AI.
 type Client struct {
-	client             *genai.Client
-	modelName          string
-	ctx                context.Context // Context for API calls
-	enableGoogleSearch bool
+	client    *genai.Client
+	modelName string
+	ctx       context.Context // Context for API calls
+	tools     []string
 }
 
 // NewClient initializes a new Gemini AI client.
 // It uses an API key from GEMINI_API_KEY environment variable if set,
 // otherwise it attempts to use Application Default Credentials (ADC).
-// The 'flash' parameter determines which model to use (gemini-pro-flash vs gemini-pro).
-func NewClient(modelName string, enableGoogleSearch bool) (aiEndpoint.AIEngine, error) {
+// The 'toolsCSV' parameter is a comma-separated list of tools to enable.
+func NewClient(modelName string, toolsCSV string) (aiEndpoint.AIEngine, error) {
 	ctx := context.Background()
 
 	cfg := &genai.ClientConfig{
@@ -48,21 +48,28 @@ func NewClient(modelName string, enableGoogleSearch bool) (aiEndpoint.AIEngine, 
 	// be managed at a higher level (e.g., in `main` function with `defer client.Close()`).
 	glog.V(0).Info("Gemini client successfully created.")
 
-	if enableGoogleSearch && strings.Contains(modelName, "gemini-2.5") {
-		glog.Warningf("Google Search is ignored for model %q.", modelName)
-		enableGoogleSearch = false
+	// Parse tools
+	var tools []string
+	if toolsCSV != "" {
+		parts := strings.Split(toolsCSV, ",")
+		for _, p := range parts {
+			t := strings.TrimSpace(p)
+			if t != "" {
+				tools = append(tools, t)
+			}
+		}
 	}
 
 	glog.V(0).Infof("Using %q model.", modelName)
-	if enableGoogleSearch {
-		glog.V(0).Info("Google Search tool enabled.")
+	if len(tools) > 0 {
+		glog.V(0).Infof("Tools enabled: %v", tools)
 	}
 
 	return &Client{
-		client:             client,
-		modelName:          modelName,
-		ctx:                ctx,
-		enableGoogleSearch: enableGoogleSearch,
+		client:    client,
+		modelName: modelName,
+		ctx:       ctx,
+		tools:     tools,
 	}, nil
 }
 
@@ -82,11 +89,26 @@ func (c *Client) SendPrompt(prompt string) (string, error) {
 	}
 
 	var config *genai.GenerateContentConfig
-	if c.enableGoogleSearch {
-		config = &genai.GenerateContentConfig{
-			Tools: []*genai.Tool{
-				{GoogleSearch: &genai.GoogleSearch{}},
-			},
+	if len(c.tools) > 0 {
+		tool := &genai.Tool{}
+		configured := false
+		for _, t := range c.tools {
+			switch t {
+			case "google-search":
+				tool.GoogleSearch = &genai.GoogleSearch{}
+				configured = true
+			case "url-context":
+				tool.URLContext = &genai.URLContext{}
+				configured = true
+			default:
+				glog.Warningf("Unknown tool: %q", t)
+			}
+		}
+
+		if configured {
+			config = &genai.GenerateContentConfig{
+				Tools: []*genai.Tool{tool},
+			}
 		}
 	}
 

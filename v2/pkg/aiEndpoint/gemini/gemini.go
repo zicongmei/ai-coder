@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/golang/glog"
 	"github.com/zicongmei/ai-coder/v2/pkg/aiEndpoint"
@@ -46,6 +47,11 @@ func NewClient(modelName string, enableGoogleSearch bool) (aiEndpoint.AIEngine, 
 	// doesn't expose a Close method. For long-running applications, the client should
 	// be managed at a higher level (e.g., in `main` function with `defer client.Close()`).
 	glog.V(0).Info("Gemini client successfully created.")
+
+	if enableGoogleSearch && strings.Contains(modelName, "gemini-2.5") {
+		glog.Warningf("Google Search is ignored for model %q.", modelName)
+		enableGoogleSearch = false
+	}
 
 	glog.V(0).Infof("Using %q model.", modelName)
 	if enableGoogleSearch {

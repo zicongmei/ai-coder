@@ -12,20 +12,21 @@ import (
 
 // Client implements the AIEngine interface for the Gemini AI.
 type Client struct {
-	client    *genai.Client
-	modelName string
-	ctx       context.Context // Context for API calls
+	client             *genai.Client
+	modelName          string
+	ctx                context.Context // Context for API calls
+	enableGoogleSearch bool
 }
 
 // NewClient initializes a new Gemini AI client.
 // It uses an API key from GEMINI_API_KEY environment variable if set,
 // otherwise it attempts to use Application Default Credentials (ADC).
 // The 'flash' parameter determines which model to use (gemini-pro-flash vs gemini-pro).
-func NewClient(modelName string) (aiEndpoint.AIEngine, error) {
+func NewClient(modelName string, enableGoogleSearch bool) (aiEndpoint.AIEngine, error) {
 	ctx := context.Background()
 
 	cfg := &genai.ClientConfig{
-		HTTPOptions: genai.HTTPOptions{APIVersion: "v1"},
+		HTTPOptions: genai.HTTPOptions{APIVersion: "v1beta"},
 	}
 
 	apiKey := GetAPIKey() // Use the auth.go function
@@ -47,11 +48,15 @@ func NewClient(modelName string) (aiEndpoint.AIEngine, error) {
 	glog.V(0).Info("Gemini client successfully created.")
 
 	glog.V(0).Infof("Using %q model.", modelName)
+	if enableGoogleSearch {
+		glog.V(0).Info("Google Search tool enabled.")
+	}
 
 	return &Client{
-		client:    client,
-		modelName: modelName,
-		ctx:       ctx,
+		client:             client,
+		modelName:          modelName,
+		ctx:                ctx,
+		enableGoogleSearch: enableGoogleSearch,
 	}, nil
 }
 
@@ -70,9 +75,18 @@ func (c *Client) SendPrompt(prompt string) (string, error) {
 		},
 	}
 
-	resp, err := c.client.Models.GenerateContent(c.ctx, c.modelName, contents, nil)
+	var config *genai.GenerateContentConfig
+	if c.enableGoogleSearch {
+		config = &genai.GenerateContentConfig{
+			Tools: []*genai.Tool{
+				{GoogleSearch: &genai.GoogleSearch{}},
+			},
+		}
+	}
+
+	resp, err := c.client.Models.GenerateContent(c.ctx, c.modelName, contents, config)
 	if err != nil {
-		glog.Errorf("Failed to generate content from Gemini: %v", err)
+		glog.Errorf("Failed to generate content from Gemini: %v, response: %v", err, resp.Text())
 		return "", fmt.Errorf("failed to generate content from Gemini: %w", err)
 	}
 

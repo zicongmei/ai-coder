@@ -10,7 +10,7 @@ import (
 
 // CountTokens estimates the number of tokens in the given text using the provided Gemini model.
 func CountTokens(ctx context.Context, client *genai.Client, modelName string, text string) (int, error) {
-	glog.V(1).Info("Requesting token count for prompt.")
+	glog.V(1).Infof("Requesting token count for prompt in model %q.", modelName)
 
 	contents := []*genai.Content{
 		{
